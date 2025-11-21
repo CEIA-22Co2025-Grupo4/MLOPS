@@ -268,3 +268,99 @@ def delete_object(bucket_name, object_key):
     except Exception as e:
         logger.error(f"Error deleting object: {e}")
         raise
+
+
+def download_to_dataframe(bucket_name, object_key):
+    """
+    Download a CSV file from MinIO directly to a pandas DataFrame.
+    No temporary files needed - works entirely in memory.
+
+    Args:
+        bucket_name (str): Name of the MinIO bucket
+        object_key (str): Key (path) of the CSV object in MinIO
+
+    Returns:
+        pd.DataFrame: DataFrame with the CSV data
+
+    Raises:
+        ClientError: If download fails or object doesn't exist
+    """
+    import pandas as pd
+    from io import BytesIO
+
+    client = get_minio_client()
+
+    try:
+        logger.info(f"Downloading '{bucket_name}/{object_key}' to DataFrame...")
+
+        # Download object to memory
+        response = client.get_object(Bucket=bucket_name, Key=object_key)
+        csv_bytes = response['Body'].read()
+
+        # Convert to DataFrame
+        df = pd.read_csv(BytesIO(csv_bytes))
+
+        file_size = len(csv_bytes) / (1024 * 1024)  # MB
+        logger.info(f"Downloaded {len(df)} records ({file_size:.2f} MB) from '{bucket_name}/{object_key}'")
+
+        return df
+
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == '404':
+            logger.error(f"Object not found: '{bucket_name}/{object_key}'")
+        else:
+            logger.error(f"Error downloading to DataFrame: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error downloading to DataFrame: {e}")
+        raise
+
+
+def upload_from_dataframe(df, bucket_name, object_key, index=False):
+    """
+    Upload a pandas DataFrame directly to MinIO as a CSV file.
+    No temporary files needed - works entirely in memory.
+
+    Args:
+        df (pd.DataFrame): DataFrame to upload
+        bucket_name (str): Name of the MinIO bucket
+        object_key (str): Key (path) for the object in MinIO
+        index (bool): Whether to include DataFrame index in CSV (default: False)
+
+    Returns:
+        bool: True if upload successful
+
+    Raises:
+        ClientError: If upload fails
+    """
+    from io import StringIO
+
+    client = get_minio_client()
+
+    try:
+        # Ensure bucket exists
+        create_bucket_if_not_exists(bucket_name)
+
+        # Convert DataFrame to CSV in memory
+        csv_buffer = StringIO()
+        df.to_csv(csv_buffer, index=index)
+        csv_bytes = csv_buffer.getvalue().encode('utf-8')
+
+        # Upload to MinIO
+        from io import BytesIO
+        client.put_object(
+            Bucket=bucket_name,
+            Key=object_key,
+            Body=BytesIO(csv_bytes),
+            ContentLength=len(csv_bytes)
+        )
+
+        file_size = len(csv_bytes) / (1024 * 1024)  # MB
+        logger.info(f"Uploaded {len(df)} records ({file_size:.2f} MB) to '{bucket_name}/{object_key}'")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error uploading DataFrame to MinIO: {e}")
+        raise
