@@ -1,0 +1,30 @@
+# MLFlow y dependencias core
+mlflow==2.9.2
+mlflow[extras]==2.9.2
+
+# Backend stores
+psycopg2-binary==2.9.9
+pymysql==1.1.0
+
+# Artifact stores
+boto3==1.34.13
+google-cloud-storage==2.14.0
+azure-storage-blob==12.19.0
+
+# ML Libraries
+scikit-learn==1.4.0
+xgboost==2.0.3
+pandas==2.1.4
+numpy==1.26.3
+
+# Deep Learning (opcional)
+torch==2.1.2
+
+# Visualización
+matplotlib==3.8.2
+seaborn==0.13.1
+
+# Utilidades
+pyarrow==14.0.2
+cryptography==41.0.7
+protobuf==4.25.1
