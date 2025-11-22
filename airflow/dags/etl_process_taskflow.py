@@ -12,6 +12,7 @@ from etl_helpers.data_loader import (
 )
 from etl_helpers.data_enrichment import enrich_crime_data
 from etl_helpers.data_splitter import preprocess_for_split, split_train_test
+from etl_helpers.outlier_processing import process_outliers as process_outliers_fn
 
 # Configuration
 BUCKET_NAME = os.getenv('DATA_REPO_BUCKET_NAME', 'data')
@@ -21,6 +22,7 @@ PREFIX_RAW_MONTHLY = '0-raw-data/monthly-data/'
 PREFIX_RAW_MERGED = '0-raw-data/data/'
 PREFIX_ENRICHED = '1-enriched-data/'
 PREFIX_SPLIT = '2-split-data/'
+PREFIX_OUTLIERS = '3-outliers/'
 
 # Data processing parameters
 LIFECYCLE_TTL_DAYS = 60
@@ -28,6 +30,7 @@ ROLLING_WINDOW_DAYS = 365
 TARGET_COLUMN = 'arrest'  # ML target variable
 SPLIT_TEST_SIZE = 0.2
 SPLIT_RANDOM_STATE = 42
+OUTLIER_STD_THRESHOLD = 3  # Number of standard deviations for outlier detection
 
 default_args = {
     'depends_on_past': False,
@@ -51,7 +54,8 @@ def process_etl_taskflow():
     @task.python
     def setup_s3():
         """Setup MinIO buckets with TTL."""
-        lifecycle_prefixes = [PREFIX_RAW_MONTHLY, PREFIX_RAW_MERGED, PREFIX_ENRICHED, PREFIX_SPLIT]
+        lifecycle_prefixes = [PREFIX_RAW_MONTHLY, PREFIX_RAW_MERGED, PREFIX_ENRICHED,
+                            PREFIX_SPLIT, PREFIX_OUTLIERS]
 
         create_bucket_if_not_exists(BUCKET_NAME, lifecycle_prefix=lifecycle_prefixes, lifecycle_days=LIFECYCLE_TTL_DAYS)
         print(f"S3 setup completed: bucket '{BUCKET_NAME}' with {LIFECYCLE_TTL_DAYS}-day TTL")
@@ -205,10 +209,43 @@ def process_etl_taskflow():
             'run_date': run_date
         }
 
-    @task.python(multiple_outputs=True)
-    def process_outliers():
-        """Process outliers in the dataset."""
-        print("Processing outliers...")
+    @task.python
+    def process_outliers(split_result, **context):
+        """
+        Process outliers using log transformation and standard deviation method.
+        Processes both train and test datasets using train statistics to avoid data leakage.
+        """
+        if split_result.get('status') == 'no_data':
+            return {'status': 'no_data'}
+
+        run_date = context['ds']  # Airflow execution date (YYYY-MM-DD)
+
+        # Load train and test data
+        train_df = download_to_dataframe(BUCKET_NAME, split_result['train_file'])
+        test_df = download_to_dataframe(BUCKET_NAME, split_result['test_file'])
+
+        # Process outliers (uses train stats for both to avoid data leakage)
+        train_processed, test_processed = process_outliers_fn(
+            train_df,
+            test_df,
+            n_std=OUTLIER_STD_THRESHOLD
+        )
+
+        # Upload processed datasets
+        train_key = f"{PREFIX_OUTLIERS}crimes_train_no_outliers_{run_date}.csv"
+        test_key = f"{PREFIX_OUTLIERS}crimes_test_no_outliers_{run_date}.csv"
+
+        upload_from_dataframe(train_processed, BUCKET_NAME, train_key)
+        upload_from_dataframe(test_processed, BUCKET_NAME, test_key)
+
+        return {
+            'status': 'success',
+            'train_file': train_key,
+            'test_file': test_key,
+            'train_records': len(train_processed),
+            'test_records': len(test_processed),
+            'run_date': run_date
+        }
 
     @task.python(multiple_outputs=True)
     def encode_data():
@@ -236,7 +273,7 @@ def process_etl_taskflow():
     merged = merge_data(downloaded)
     enriched = enrich_data(merged, downloaded)
     split = split_data(enriched)
-    outliers = process_outliers()
+    outliers = process_outliers(split)
     encoded = encode_data()
     scaled = scale_data()
     balanced = balance_data()

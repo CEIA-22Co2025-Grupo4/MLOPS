@@ -15,37 +15,66 @@ logger = logging.getLogger(__name__)
 def calculate_nearest_station(crimes_df, stations_df):
     """
     Calculate distance from each crime to the nearest police station.
-    Uses GeoPandas spatial join for efficient computation.
+    Uses X/Y coordinates if available (already projected), otherwise lat/lon.
 
     Args:
-        crimes_df (pd.DataFrame): Crime data with latitude/longitude
-        stations_df (pd.DataFrame): Police stations with latitude/longitude
+        crimes_df (pd.DataFrame): Crime data with x/y coordinates or latitude/longitude
+        stations_df (pd.DataFrame): Police stations with x/y coordinates or latitude/longitude
 
     Returns:
-        pd.DataFrame: Crime data with nearest station distance and district
+        pd.DataFrame: Crime data with nearest station distance (in meters) and district
     """
     logger.info("Calculating distances to nearest police stations...")
 
     try:
-        # Convert crimes to GeoDataFrame
-        crimes_gdf = gpd.GeoDataFrame(
-            crimes_df,
-            geometry=gpd.points_from_xy(
-                crimes_df['longitude'].astype(float),
-                crimes_df['latitude'].astype(float)
-            ),
-            crs="EPSG:4326"
-        )
+        # Check if X/Y coordinates are available (already projected)
+        has_xy_crimes = 'x_coordinate' in crimes_df.columns and 'y_coordinate' in crimes_df.columns
+        has_xy_stations = 'x_coordinate' in stations_df.columns and 'y_coordinate' in stations_df.columns
 
-        # Convert stations to GeoDataFrame
-        stations_gdf = gpd.GeoDataFrame(
-            stations_df,
-            geometry=gpd.points_from_xy(
-                stations_df['longitude'].astype(float),
-                stations_df['latitude'].astype(float)
-            ),
-            crs="EPSG:4326"
-        )
+        if has_xy_crimes and has_xy_stations:
+            # Use X/Y coordinates directly (already projected, likely Illinois State Plane)
+            logger.info("Using X/Y coordinates (projected)")
+            crimes_gdf = gpd.GeoDataFrame(
+                crimes_df,
+                geometry=gpd.points_from_xy(
+                    crimes_df['x_coordinate'].astype(float),
+                    crimes_df['y_coordinate'].astype(float)
+                ),
+                crs="EPSG:3435"  # Illinois State Plane (feet) - adjust if needed
+            )
+
+            stations_gdf = gpd.GeoDataFrame(
+                stations_df,
+                geometry=gpd.points_from_xy(
+                    stations_df['x_coordinate'].astype(float),
+                    stations_df['y_coordinate'].astype(float)
+                ),
+                crs="EPSG:3435"
+            )
+        else:
+            # Fallback to lat/lon and convert to projected CRS
+            logger.info("Using latitude/longitude coordinates")
+            crimes_gdf = gpd.GeoDataFrame(
+                crimes_df,
+                geometry=gpd.points_from_xy(
+                    crimes_df['longitude'].astype(float),
+                    crimes_df['latitude'].astype(float)
+                ),
+                crs="EPSG:4326"
+            )
+
+            stations_gdf = gpd.GeoDataFrame(
+                stations_df,
+                geometry=gpd.points_from_xy(
+                    stations_df['longitude'].astype(float),
+                    stations_df['latitude'].astype(float)
+                ),
+                crs="EPSG:4326"
+            )
+
+            # Convert to projected CRS for Chicago
+            crimes_gdf = crimes_gdf.to_crs(epsg=32616)
+            stations_gdf = stations_gdf.to_crs(epsg=32616)
 
         # Perform spatial join to find nearest station
         crimes_with_stations = gpd.sjoin_nearest(

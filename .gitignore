@@ -209,3 +209,6 @@ __marimo__/
 .DS_Store
 
 datasets/
+
+# Airflow logs
+airflow/logs/
