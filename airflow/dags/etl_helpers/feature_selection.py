@@ -148,4 +148,4 @@ def select_features(train_df, test_df, target_column="arrest", mi_threshold=0.05
     logger.info(f"  Selected features: {len(selected_features)}")
     logger.info(f"  Feature list: {selected_features}")
 
-    return train_selected, test_selected
+    return train_selected, test_selected, mi_scores

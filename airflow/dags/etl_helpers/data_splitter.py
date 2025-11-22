@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def preprocess_for_split(df):
     """
     Preprocess data before splitting into train/test.
-    Removes duplicates and fills null values in location_description.
+    Removes duplicates, fills null values, and drops non-feature columns.
 
     Args:
         df (pd.DataFrame): Raw enriched dataframe
@@ -52,6 +52,13 @@ def preprocess_for_split(df):
                 )
             else:
                 logger.info("No null values found in 'location_description'")
+
+        # Drop non-feature columns (temporal features already extracted)
+        columns_to_drop = ["date", "index_right", "description"]
+        existing_drops = [col for col in columns_to_drop if col in df_clean.columns]
+        if existing_drops:
+            df_clean = df_clean.drop(columns=existing_drops)
+            logger.info(f"Dropped non-feature columns: {existing_drops}")
 
         logger.info(f"Preprocessing completed: {len(df_clean)} records ready for split")
         return df_clean

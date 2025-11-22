@@ -92,6 +92,11 @@ def calculate_nearest_station(crimes_df, stations_df):
         # Convert back to regular DataFrame
         result_df = pd.DataFrame(crimes_with_stations.drop(columns="geometry"))
 
+        # Drop index_right column created by sjoin_nearest
+        if "index_right" in result_df.columns:
+            result_df = result_df.drop(columns=["index_right"])
+            logger.info("Dropped 'index_right' column from spatial join")
+
         # Rename columns to match expected format
         result_df = result_df.rename(
             columns={

@@ -175,13 +175,11 @@ def apply_frequency_encoding(train_df, test_df, columns=None):
         tuple: (train_encoded, test_encoded, freq_maps) - DataFrames and frequency mappings
     """
     if columns is None:
+        # Only include columns that actually exist after enrichment
         columns = [
-            "iucr",
             "primary_type",
             "location_description",
             "fbi_code",
-            "district",
-            "nearest_police_station_district",
             "nearest_police_station_district_name",
             "beat",
             "ward",
@@ -259,12 +257,9 @@ def encode_data(train_df, test_df):
         "day_of_week",
         "day_time",
         "domestic",
-        "iucr",
         "primary_type",
         "location_description",
         "fbi_code",
-        "district",
-        "nearest_police_station_district",
         "nearest_police_station_district_name",
         "beat",
         "ward",

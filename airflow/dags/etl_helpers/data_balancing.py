@@ -40,16 +40,25 @@ def balance_data(train_df, target_column="arrest"):
     X = train_df.drop(columns=[target_column])
     y = train_df[target_column]
 
+    # Validate: check for non-numeric columns before SMOTE
+    non_numeric_cols = X.select_dtypes(include=["object"]).columns.tolist()
+    if non_numeric_cols:
+        logger.error(f"Non-numeric columns found: {non_numeric_cols}")
+        logger.error(f"Column types: {X[non_numeric_cols].dtypes.to_dict()}")
+        logger.error(f"Sample values: {X[non_numeric_cols].head(1).to_dict('records')}")
+        raise ValueError(
+            f"Cannot balance data with non-numeric columns: {non_numeric_cols}. "
+            f"All features must be numeric for SMOTE."
+        )
+
     # Log original class distribution
     original_counts = y.value_counts()
     original_ratio = original_counts.min() / original_counts.max()
     logger.info("Original class distribution:")
-    logger.info(
-        f"  Class 0: {original_counts.get(0, 0)} ({100 * original_counts.get(0, 0) / len(y):.1f}%)"
-    )
-    logger.info(
-        f"  Class 1: {original_counts.get(1, 0)} ({100 * original_counts.get(1, 0) / len(y):.1f}%)"
-    )
+    class_0_count = original_counts.loc[0] if 0 in original_counts.index else 0
+    class_1_count = original_counts.loc[1] if 1 in original_counts.index else 0
+    logger.info(f"  Class 0: {class_0_count} ({100 * class_0_count / len(y):.1f}%)")
+    logger.info(f"  Class 1: {class_1_count} ({100 * class_1_count / len(y):.1f}%)")
     logger.info(f"  Original ratio (min/max): {original_ratio:.3f}")
 
     # Create balancing pipeline
@@ -71,11 +80,13 @@ def balance_data(train_df, target_column="arrest"):
     final_counts = y_resampled.value_counts()
     final_ratio = final_counts.min() / final_counts.max()
     logger.info("Balanced class distribution:")
+    final_class_0 = final_counts.loc[0] if 0 in final_counts.index else 0
+    final_class_1 = final_counts.loc[1] if 1 in final_counts.index else 0
     logger.info(
-        f"  Class 0: {final_counts.get(0, 0)} ({100 * final_counts.get(0, 0) / len(y_resampled):.1f}%)"
+        f"  Class 0: {final_class_0} ({100 * final_class_0 / len(y_resampled):.1f}%)"
     )
     logger.info(
-        f"  Class 1: {final_counts.get(1, 0)} ({100 * final_counts.get(1, 0) / len(y_resampled):.1f}%)"
+        f"  Class 1: {final_class_1} ({100 * final_class_1 / len(y_resampled):.1f}%)"
     )
     logger.info(f"  Final ratio (min/max): {final_ratio:.3f}")
 

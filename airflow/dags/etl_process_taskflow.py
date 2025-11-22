@@ -23,6 +23,12 @@ from etl_helpers.data_encoding import encode_data as encode_data_fn
 from etl_helpers.data_scaling import scale_data as scale_data_fn
 from etl_helpers.data_balancing import balance_data as balance_data_fn
 from etl_helpers.feature_selection import select_features as select_features_fn
+from etl_helpers.monitoring import (
+    log_raw_data_metrics,
+    log_split_metrics,
+    log_balance_metrics,
+    log_feature_selection_metrics,
+)
 
 # Configuration
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
@@ -224,6 +230,9 @@ def process_etl_taskflow():
         stations_df = download_to_dataframe(BUCKET_NAME, merge_result["stations_file"])
         enriched_df = enrich_crime_data(crimes_df, stations_df)
 
+        # Monitor raw data quality
+        log_raw_data_metrics(crimes_df, run_name=f"raw_data_{run_date}")
+
         # Upload enriched data
         upload_from_dataframe(enriched_df, BUCKET_NAME, enriched_key)
 
@@ -261,6 +270,11 @@ def process_etl_taskflow():
             test_size=SPLIT_TEST_SIZE,
             random_state=SPLIT_RANDOM_STATE,
             stratify_column=TARGET_COLUMN,
+        )
+
+        # Monitor split
+        log_split_metrics(
+            train_df, test_df, target_column=TARGET_COLUMN, run_name=f"split_{run_date}"
         )
 
         # Upload train and test datasets
@@ -423,6 +437,14 @@ def process_etl_taskflow():
         train_df = download_to_dataframe(BUCKET_NAME, scale_result["train_file"])
         train_balanced = balance_data_fn(train_df, target_column=TARGET_COLUMN)
 
+        # Monitor balancing
+        log_balance_metrics(
+            train_df,
+            train_balanced,
+            target_column=TARGET_COLUMN,
+            run_name=f"balance_{run_date}",
+        )
+
         # Upload balanced train data
         upload_from_dataframe(train_balanced, BUCKET_NAME, train_key)
 
@@ -463,12 +485,26 @@ def process_etl_taskflow():
             return {"status": "no_data"}
 
         # Load balanced train and test data
-        train_df = download_to_dataframe(BUCKET_NAME, balance_result["train_file"])
+        train_df_original = download_to_dataframe(
+            BUCKET_NAME, balance_result["train_file"]
+        )
         test_df = download_to_dataframe(BUCKET_NAME, balance_result["test_file"])
 
         # Apply feature selection
-        train_selected, test_selected = select_features_fn(
-            train_df, test_df, target_column=TARGET_COLUMN, mi_threshold=MI_THRESHOLD
+        train_selected, test_selected, mi_scores = select_features_fn(
+            train_df_original,
+            test_df,
+            target_column=TARGET_COLUMN,
+            mi_threshold=MI_THRESHOLD,
+        )
+
+        # Monitor feature selection
+        log_feature_selection_metrics(
+            train_df_original,
+            train_selected,
+            mi_scores_df=mi_scores,
+            target_column=TARGET_COLUMN,
+            run_name=f"features_{run_date}",
         )
 
         # Upload final ML-ready datasets
