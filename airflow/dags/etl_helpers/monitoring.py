@@ -39,12 +39,34 @@ def _save_and_log_artifact(filepath, artifact_path):
 
 
 def _save_figure_and_log(fig, artifact_path, dpi=100):
-    """Save matplotlib figure to temp file and log to MLflow."""
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-        fig.savefig(tmp.name, dpi=dpi, bbox_inches="tight")
-        _save_and_log_artifact(tmp.name, artifact_path)
-        os.unlink(tmp.name)
-    plt.close(fig)
+    """Save matplotlib figure to temp file and log to MLflow.
+
+    Args:
+        fig: Matplotlib figure
+        artifact_path: Full path including filename (e.g., 'charts/raw_data_overview.png')
+        dpi: Resolution for saved image
+    """
+    import mlflow
+
+    # Extract directory and filename from artifact_path
+    if "/" in artifact_path:
+        artifact_dir = "/".join(artifact_path.split("/")[:-1])
+        filename = artifact_path.split("/")[-1]
+    else:
+        artifact_dir = None
+        filename = artifact_path
+
+    # Create temp file with the correct final name
+    temp_dir = tempfile.mkdtemp()
+    temp_filepath = os.path.join(temp_dir, filename)
+
+    try:
+        fig.savefig(temp_filepath, dpi=dpi, bbox_inches="tight")
+        mlflow.log_artifact(temp_filepath, artifact_dir)
+    finally:
+        os.unlink(temp_filepath)
+        os.rmdir(temp_dir)
+        plt.close(fig)
 
 
 def _get_value_distribution(series, normalize=True, as_percentage=True):
@@ -146,7 +168,7 @@ def log_raw_data_metrics(df, run_name="raw_data"):
 
     logger.info(f"Logging raw data metrics to MLflow: {run_name}")
 
-    with mlflow.start_run(run_name=run_name, nested=True):
+    with mlflow.start_run(run_name=run_name):
         # Basic metrics
         total_records = len(df)
         metrics = {
@@ -269,7 +291,7 @@ def log_split_metrics(train_df, test_df, target_column="arrest", run_name="split
 
     logger.info(f"Logging split metrics to MLflow: {run_name}")
 
-    with mlflow.start_run(run_name=run_name, nested=True):
+    with mlflow.start_run(run_name=run_name):
         # Basic metrics
         metrics = {
             "train_size": len(train_df),
@@ -342,7 +364,7 @@ def log_balance_metrics(
 
     logger.info(f"Logging balance metrics to MLflow: {run_name}")
 
-    with mlflow.start_run(run_name=run_name, nested=True):
+    with mlflow.start_run(run_name=run_name):
         # Size metrics
         metrics = {
             "original_size": len(original_df),
@@ -428,7 +450,7 @@ def log_feature_selection_metrics(
 
     logger.info(f"Logging feature selection metrics to MLflow: {run_name}")
 
-    with mlflow.start_run(run_name=run_name, nested=True):
+    with mlflow.start_run(run_name=run_name):
         # Feature counts
         orig_features = [c for c in original_df.columns if c != target_column]
         selected_features = [c for c in selected_df.columns if c != target_column]
