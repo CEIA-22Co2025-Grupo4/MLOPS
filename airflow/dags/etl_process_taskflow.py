@@ -21,6 +21,8 @@ from etl_helpers.data_splitter import preprocess_for_split, split_train_test
 from etl_helpers.outlier_processing import process_outliers as process_outliers_fn
 from etl_helpers.data_encoding import encode_data as encode_data_fn
 from etl_helpers.data_scaling import scale_data as scale_data_fn
+from etl_helpers.data_balancing import balance_data as balance_data_fn
+from etl_helpers.feature_selection import select_features as select_features_fn
 
 # Configuration
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
@@ -33,6 +35,8 @@ PREFIX_SPLIT = "3-split-data/"
 PREFIX_OUTLIERS = "4-outliers/"
 PREFIX_ENCODED = "5-encoded/"
 PREFIX_SCALED = "6-scaled/"
+PREFIX_BALANCED = "7-balanced/"
+PREFIX_ML_READY = "ml-ready-data/"  # Final ML-ready datasets
 
 # Data processing parameters
 LIFECYCLE_TTL_DAYS = 60  # All files deleted after 60 days
@@ -41,6 +45,7 @@ TARGET_COLUMN = "arrest"  # ML target variable
 SPLIT_TEST_SIZE = 0.2
 SPLIT_RANDOM_STATE = 42
 OUTLIER_STD_THRESHOLD = 3  # Number of standard deviations for outlier detection
+MI_THRESHOLD = 0.05  # Mutual Information threshold for feature selection
 
 default_args = {
     "depends_on_past": False,
@@ -73,6 +78,8 @@ def process_etl_taskflow():
             PREFIX_OUTLIERS,
             PREFIX_ENCODED,
             PREFIX_SCALED,
+            PREFIX_BALANCED,
+            PREFIX_ML_READY,
         ]
 
         create_bucket_if_not_exists(BUCKET_NAME)
@@ -389,15 +396,90 @@ def process_etl_taskflow():
             "test_file": test_key,
         }
 
-    @task.python(multiple_outputs=True)
-    def balance_data():
-        """Balance dataset using SMOTE and undersampling."""
-        print("Balancing dataset...")
+    @task.python
+    def balance_data(scale_result, **context):
+        """
+        Balance training dataset using SMOTE + RandomUnderSampler.
+        Strategy: SMOTE (0.5) → RandomUnderSampler (0.8)
+        Note: Only balances TRAIN data, test remains unchanged.
+        """
+        run_date = context["ds"]
+        train_key = f"{PREFIX_BALANCED}crimes_train_balanced_{run_date}.csv"
+        test_key = scale_result["test_file"]  # Test unchanged, just pass through
 
-    @task.python(multiple_outputs=True)
-    def extract_features():
-        """Extract and select relevant features."""
-        print("Extracting features...")
+        # Check if balanced file already exists (idempotent)
+        if check_file_exists(BUCKET_NAME, train_key):
+            return {
+                "status": "success",
+                "train_file": train_key,
+                "test_file": test_key,
+            }
+
+        # Check if upstream returned no_data
+        if scale_result.get("status") == "no_data":
+            return {"status": "no_data"}
+
+        # Load train data and balance it
+        train_df = download_to_dataframe(BUCKET_NAME, scale_result["train_file"])
+        train_balanced = balance_data_fn(train_df, target_column=TARGET_COLUMN)
+
+        # Upload balanced train data
+        upload_from_dataframe(train_balanced, BUCKET_NAME, train_key)
+
+        return {
+            "status": "success",
+            "train_file": train_key,
+            "test_file": test_key,
+        }
+
+    @task.python
+    def extract_features(balance_result, **context):
+        """
+        Select relevant features and output final ML-ready datasets.
+
+        Strategy:
+        1. Remove correlated features (Beat, Ward, Community Area, etc.)
+        2. Apply Mutual Information selection (MI-Score > 0.05)
+        3. Save to ml-ready-data/ prefix for easy consumption
+
+        Output: Final train/test datasets ready for ML model training.
+        """
+        run_date = context["ds"]
+        train_key = f"{PREFIX_ML_READY}train_{run_date}.csv"
+        test_key = f"{PREFIX_ML_READY}test_{run_date}.csv"
+
+        # Check if ML-ready files already exist (idempotent)
+        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
+            BUCKET_NAME, test_key
+        ):
+            return {
+                "status": "success",
+                "train_file": train_key,
+                "test_file": test_key,
+            }
+
+        # Check if upstream returned no_data
+        if balance_result.get("status") == "no_data":
+            return {"status": "no_data"}
+
+        # Load balanced train and test data
+        train_df = download_to_dataframe(BUCKET_NAME, balance_result["train_file"])
+        test_df = download_to_dataframe(BUCKET_NAME, balance_result["test_file"])
+
+        # Apply feature selection
+        train_selected, test_selected = select_features_fn(
+            train_df, test_df, target_column=TARGET_COLUMN, mi_threshold=MI_THRESHOLD
+        )
+
+        # Upload final ML-ready datasets
+        upload_from_dataframe(train_selected, BUCKET_NAME, train_key)
+        upload_from_dataframe(test_selected, BUCKET_NAME, test_key)
+
+        return {
+            "status": "success",
+            "train_file": train_key,
+            "test_file": test_key,
+        }
 
     # Task dependencies
     s3_setup = setup_s3()
@@ -408,8 +490,8 @@ def process_etl_taskflow():
     outliers = process_outliers(split)
     encoded = encode_data(outliers)
     scaled = scale_data(encoded)
-    balanced = balance_data()
-    features = extract_features()
+    balanced = balance_data(scaled)
+    features = extract_features(balanced)
 
     (
         s3_setup

@@ -43,9 +43,13 @@ def balance_data(train_df, target_column="arrest"):
     # Log original class distribution
     original_counts = y.value_counts()
     original_ratio = original_counts.min() / original_counts.max()
-    logger.info(f"Original class distribution:")
-    logger.info(f"  Class 0: {original_counts.get(0, 0)} ({100 * original_counts.get(0, 0) / len(y):.1f}%)")
-    logger.info(f"  Class 1: {original_counts.get(1, 0)} ({100 * original_counts.get(1, 0) / len(y):.1f}%)")
+    logger.info("Original class distribution:")
+    logger.info(
+        f"  Class 0: {original_counts.get(0, 0)} ({100 * original_counts.get(0, 0) / len(y):.1f}%)"
+    )
+    logger.info(
+        f"  Class 1: {original_counts.get(1, 0)} ({100 * original_counts.get(1, 0) / len(y):.1f}%)"
+    )
     logger.info(f"  Original ratio (min/max): {original_ratio:.3f}")
 
     # Create balancing pipeline
@@ -66,9 +70,13 @@ def balance_data(train_df, target_column="arrest"):
     # Log final class distribution
     final_counts = y_resampled.value_counts()
     final_ratio = final_counts.min() / final_counts.max()
-    logger.info(f"Balanced class distribution:")
-    logger.info(f"  Class 0: {final_counts.get(0, 0)} ({100 * final_counts.get(0, 0) / len(y_resampled):.1f}%)")
-    logger.info(f"  Class 1: {final_counts.get(1, 0)} ({100 * final_counts.get(1, 0) / len(y_resampled):.1f}%)")
+    logger.info("Balanced class distribution:")
+    logger.info(
+        f"  Class 0: {final_counts.get(0, 0)} ({100 * final_counts.get(0, 0) / len(y_resampled):.1f}%)"
+    )
+    logger.info(
+        f"  Class 1: {final_counts.get(1, 0)} ({100 * final_counts.get(1, 0) / len(y_resampled):.1f}%)"
+    )
     logger.info(f"  Final ratio (min/max): {final_ratio:.3f}")
 
     # Combine back into DataFrame
