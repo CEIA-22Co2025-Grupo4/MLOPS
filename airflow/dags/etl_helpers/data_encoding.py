@@ -12,7 +12,9 @@ from sklearn.preprocessing import OneHotEncoder
 logger = logging.getLogger(__name__)
 
 
-def apply_log_transformation(train_df, test_df, column="distance_crime_to_police_station"):
+def apply_log_transformation(
+    train_df, test_df, column="distance_crime_to_police_station"
+):
     """
     Apply log1p transformation to reduce skewness.
 
@@ -58,8 +60,12 @@ def apply_cyclic_encoding(train_df, test_df, column="day_of_week"):
 
     if column in train_encoded.columns:
         # Convert to 1-7 range and apply sine transformation
-        train_encoded[f"{column}_sin"] = np.sin(2 * np.pi * (train_encoded[column] + 1) / 7)
-        test_encoded[f"{column}_sin"] = np.sin(2 * np.pi * (test_encoded[column] + 1) / 7)
+        train_encoded[f"{column}_sin"] = np.sin(
+            2 * np.pi * (train_encoded[column] + 1) / 7
+        )
+        test_encoded[f"{column}_sin"] = np.sin(
+            2 * np.pi * (test_encoded[column] + 1) / 7
+        )
         logger.info(f"Cyclic encoding applied: '{column}_sin' created")
     else:
         logger.warning(f"Column '{column}' not found in DataFrame")
@@ -104,8 +110,12 @@ def apply_onehot_encoding(train_df, test_df, columns=None):
         feature_names = ohe.get_feature_names_out([col])
 
         # Create DataFrames and join
-        train_ohe_df = pd.DataFrame(train_array, columns=feature_names, index=train_encoded.index)
-        test_ohe_df = pd.DataFrame(test_array, columns=feature_names, index=test_encoded.index)
+        train_ohe_df = pd.DataFrame(
+            train_array, columns=feature_names, index=train_encoded.index
+        )
+        test_ohe_df = pd.DataFrame(
+            test_array, columns=feature_names, index=test_encoded.index
+        )
 
         train_encoded = train_encoded.join(train_ohe_df)
         test_encoded = test_encoded.join(test_ohe_df)
@@ -198,7 +208,9 @@ def apply_frequency_encoding(train_df, test_df, columns=None):
         train_encoded[new_col] = train_encoded[col].map(freq_encoding).astype(float)
 
         # For test: use 0 for unseen categories
-        test_encoded[new_col] = test_encoded[col].map(freq_encoding).fillna(0).astype(float)
+        test_encoded[new_col] = (
+            test_encoded[col].map(freq_encoding).fillna(0).astype(float)
+        )
 
         logger.info(f"  {col}: {len(freq_encoding)} unique values -> {new_col}")
 

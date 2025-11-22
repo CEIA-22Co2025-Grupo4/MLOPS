@@ -1,0 +1,84 @@
+"""
+Data Scaling Functions
+
+Functions for scaling numerical features using StandardScaler.
+"""
+
+import pandas as pd
+import logging
+from sklearn.preprocessing import StandardScaler
+
+logger = logging.getLogger(__name__)
+
+
+def scale_data(train_df, test_df, columns=None):
+    """
+    Scale numerical features using StandardScaler.
+    Fits scaler on train data and transforms both train and test.
+
+    Args:
+        train_df (pd.DataFrame): Training dataframe
+        test_df (pd.DataFrame): Test dataframe
+        columns (list): Columns to scale (default: spatial columns)
+
+    Returns:
+        tuple: (train_scaled, test_scaled) DataFrames
+    """
+    if columns is None:
+        columns = [
+            "x_coordinate",
+            "y_coordinate",
+            "latitude",
+            "longitude",
+            "distance_crime_to_police_station",
+        ]
+
+    logger.info(f"Scaling {len(columns)} numerical features...")
+
+    train_scaled = train_df.copy()
+    test_scaled = test_df.copy()
+
+    # Check which columns exist
+    existing_columns = [col for col in columns if col in train_df.columns]
+    missing_columns = [col for col in columns if col not in train_df.columns]
+
+    if missing_columns:
+        logger.warning(f"Columns not found: {missing_columns}")
+
+    if not existing_columns:
+        logger.warning("No columns to scale found in DataFrame")
+        return train_scaled, test_scaled
+
+    # Extract columns to scale
+    train_subset = train_df[existing_columns]
+    test_subset = test_df[existing_columns]
+
+    # Fit scaler on train data
+    scaler = StandardScaler()
+    train_array = scaler.fit_transform(train_subset)
+    test_array = scaler.transform(test_subset)
+
+    # Create scaled DataFrames with _standardized suffix
+    train_scaled_df = pd.DataFrame(
+        train_array,
+        columns=[f"{col}_standardized" for col in existing_columns],
+        index=train_df.index,
+    )
+    test_scaled_df = pd.DataFrame(
+        test_array,
+        columns=[f"{col}_standardized" for col in existing_columns],
+        index=test_df.index,
+    )
+
+    # Join scaled columns and drop originals
+    train_scaled = train_scaled.join(train_scaled_df)
+    test_scaled = test_scaled.join(test_scaled_df)
+
+    train_scaled = train_scaled.drop(columns=existing_columns)
+    test_scaled = test_scaled.drop(columns=existing_columns)
+
+    logger.info(f"Scaled {len(existing_columns)} columns using StandardScaler")
+    logger.info(f"  Train shape: {train_scaled.shape}")
+    logger.info(f"  Test shape: {test_scaled.shape}")
+
+    return train_scaled, test_scaled

@@ -20,6 +20,7 @@ from etl_helpers.data_enrichment import enrich_crime_data
 from etl_helpers.data_splitter import preprocess_for_split, split_train_test
 from etl_helpers.outlier_processing import process_outliers as process_outliers_fn
 from etl_helpers.data_encoding import encode_data as encode_data_fn
+from etl_helpers.data_scaling import scale_data as scale_data_fn
 
 # Configuration
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
@@ -31,6 +32,7 @@ PREFIX_ENRICHED = "2-enriched-data/"
 PREFIX_SPLIT = "3-split-data/"
 PREFIX_OUTLIERS = "4-outliers/"
 PREFIX_ENCODED = "5-encoded/"
+PREFIX_SCALED = "6-scaled/"
 
 # Data processing parameters
 LIFECYCLE_TTL_DAYS = 60  # All files deleted after 60 days
@@ -70,6 +72,7 @@ def process_etl_taskflow():
             PREFIX_SPLIT,
             PREFIX_OUTLIERS,
             PREFIX_ENCODED,
+            PREFIX_SCALED,
         ]
 
         create_bucket_if_not_exists(BUCKET_NAME)
@@ -347,10 +350,44 @@ def process_etl_taskflow():
             "test_file": test_key,
         }
 
-    @task.python(multiple_outputs=True)
-    def scale_data():
-        """Scale numerical features."""
-        print("Applying scaling...")
+    @task.python
+    def scale_data(encode_result, **context):
+        """
+        Scale numerical features using StandardScaler.
+        Scales: x_coordinate, y_coordinate, latitude, longitude, distance_crime_to_police_station
+        """
+        run_date = context["ds"]
+        train_key = f"{PREFIX_SCALED}crimes_train_scaled_{run_date}.csv"
+        test_key = f"{PREFIX_SCALED}crimes_test_scaled_{run_date}.csv"
+
+        # Check if scaled files already exist (idempotent)
+        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
+            BUCKET_NAME, test_key
+        ):
+            return {
+                "status": "success",
+                "train_file": train_key,
+                "test_file": test_key,
+            }
+
+        # Check if upstream returned no_data
+        if encode_result.get("status") == "no_data":
+            return {"status": "no_data"}
+
+        # Process data
+        train_df = download_to_dataframe(BUCKET_NAME, encode_result["train_file"])
+        test_df = download_to_dataframe(BUCKET_NAME, encode_result["test_file"])
+        train_scaled, test_scaled = scale_data_fn(train_df, test_df)
+
+        # Upload scaled datasets
+        upload_from_dataframe(train_scaled, BUCKET_NAME, train_key)
+        upload_from_dataframe(test_scaled, BUCKET_NAME, test_key)
+
+        return {
+            "status": "success",
+            "train_file": train_key,
+            "test_file": test_key,
+        }
 
     @task.python(multiple_outputs=True)
     def balance_data():
@@ -370,7 +407,7 @@ def process_etl_taskflow():
     split = split_data(enriched)
     outliers = process_outliers(split)
     encoded = encode_data(outliers)
-    scaled = scale_data()
+    scaled = scale_data(encoded)
     balanced = balance_data()
     features = extract_features()
 
