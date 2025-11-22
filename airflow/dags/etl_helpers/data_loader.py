@@ -25,15 +25,13 @@ def get_socrata_client():
     Returns:
         Socrata: Configured Socrata client
     """
-    app_token = os.getenv('SOCRATA_APP_TOKEN')
+    app_token = os.getenv("SOCRATA_APP_TOKEN")
     if not app_token:
-        logger.warning("SOCRATA_APP_TOKEN not found in environment. API rate limits will apply.")
+        logger.warning(
+            "SOCRATA_APP_TOKEN not found in environment. API rate limits will apply."
+        )
 
-    client = Socrata(
-        SOCRATA_DOMAIN,
-        app_token,
-        timeout=60
-    )
+    client = Socrata(SOCRATA_DOMAIN, app_token, timeout=60)
     return client
 
 
@@ -52,8 +50,8 @@ def download_crimes_full(output_file=None):
 
     try:
         # Calculate date range for past year
-        one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
-        today = datetime.now().strftime('%Y-%m-%d')
+        one_year_ago = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
 
         logger.info(f"Downloading full crime dataset from {one_year_ago} to {today}...")
 
@@ -61,7 +59,7 @@ def download_crimes_full(output_file=None):
         results = client.get_all(
             CRIME_DATASET_ID,
             where=f"date >= '{one_year_ago}' AND date <= '{today}'",
-            order=":id"
+            order=":id",
         )
 
         # Convert to DataFrame
@@ -99,17 +97,19 @@ def download_crimes_incremental(start_date, end_date, output_file=None):
     try:
         # Convert dates to strings if datetime objects
         if isinstance(start_date, datetime):
-            start_date = start_date.strftime('%Y-%m-%d')
+            start_date = start_date.strftime("%Y-%m-%d")
         if isinstance(end_date, datetime):
-            end_date = end_date.strftime('%Y-%m-%d')
+            end_date = end_date.strftime("%Y-%m-%d")
 
-        logger.info(f"Downloading incremental crime data from {start_date} to {end_date}...")
+        logger.info(
+            f"Downloading incremental crime data from {start_date} to {end_date}..."
+        )
 
         # Download records for the specified date range
         results = client.get_all(
             CRIME_DATASET_ID,
             where=f"date >= '{start_date}' AND date < '{end_date}'",
-            order=":id"
+            order=":id",
         )
 
         # Convert to DataFrame
@@ -146,10 +146,7 @@ def download_police_stations(output_file=None):
         logger.info("Downloading police stations dataset...")
 
         # Download all police stations (only 23 records)
-        results = client.get_all(
-            POLICE_STATIONS_DATASET_ID,
-            order=":id"
-        )
+        results = client.get_all(POLICE_STATIONS_DATASET_ID, order=":id")
 
         # Convert to DataFrame
         df = pd.DataFrame.from_records(results)

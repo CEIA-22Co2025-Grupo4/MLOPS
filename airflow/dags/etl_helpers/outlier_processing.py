@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Column to process for outliers
-DISTANCE_COLUMN = 'distance_crime_to_police_station'
+DISTANCE_COLUMN = "distance_crime_to_police_station"
 
 
 def apply_log_transformation(df, column=DISTANCE_COLUMN):
@@ -66,8 +66,7 @@ def remove_outliers_std_method(df, column=DISTANCE_COLUMN, n_std=3):
 
     # Filter outliers
     df_no_outliers = df[
-        (df[column] >= lower_bound) &
-        (df[column] <= upper_bound)
+        (df[column] >= lower_bound) & (df[column] <= upper_bound)
     ].copy()
 
     outliers_removed = initial_count - len(df_no_outliers)
@@ -115,28 +114,34 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     upper_bound = mean_val + n_std * std_val
 
     logger.info(f"Train statistics: mean={mean_val:.2f}, std={std_val:.2f}")
-    logger.info(f"Outlier bounds (±{n_std} std): {lower_bound:.2f} to {upper_bound:.2f}")
+    logger.info(
+        f"Outlier bounds (±{n_std} std): {lower_bound:.2f} to {upper_bound:.2f}"
+    )
 
     # Step 3: Remove outliers from both datasets
     train_initial = len(train_transformed)
     test_initial = len(test_transformed)
 
     train_processed = train_transformed[
-        (train_transformed[column] >= lower_bound) &
-        (train_transformed[column] <= upper_bound)
+        (train_transformed[column] >= lower_bound)
+        & (train_transformed[column] <= upper_bound)
     ].copy()
 
     test_processed = test_transformed[
-        (test_transformed[column] >= lower_bound) &
-        (test_transformed[column] <= upper_bound)
+        (test_transformed[column] >= lower_bound)
+        & (test_transformed[column] <= upper_bound)
     ].copy()
 
     # Log results
     train_removed = train_initial - len(train_processed)
     test_removed = test_initial - len(test_processed)
 
-    logger.info(f"Train: removed {train_removed} outliers ({100*train_removed/train_initial:.2f}%)")
-    logger.info(f"Test: removed {test_removed} outliers ({100*test_removed/test_initial:.2f}%)")
+    logger.info(
+        f"Train: removed {train_removed} outliers ({100 * train_removed / train_initial:.2f}%)"
+    )
+    logger.info(
+        f"Test: removed {test_removed} outliers ({100 * test_removed / test_initial:.2f}%)"
+    )
     logger.info(f"Outlier processing completed")
 
     return train_processed, test_processed

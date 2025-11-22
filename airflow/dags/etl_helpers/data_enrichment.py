@@ -28,8 +28,13 @@ def calculate_nearest_station(crimes_df, stations_df):
 
     try:
         # Check if X/Y coordinates are available (already projected)
-        has_xy_crimes = 'x_coordinate' in crimes_df.columns and 'y_coordinate' in crimes_df.columns
-        has_xy_stations = 'x_coordinate' in stations_df.columns and 'y_coordinate' in stations_df.columns
+        has_xy_crimes = (
+            "x_coordinate" in crimes_df.columns and "y_coordinate" in crimes_df.columns
+        )
+        has_xy_stations = (
+            "x_coordinate" in stations_df.columns
+            and "y_coordinate" in stations_df.columns
+        )
 
         if has_xy_crimes and has_xy_stations:
             # Use X/Y coordinates directly (already projected, likely Illinois State Plane)
@@ -37,19 +42,19 @@ def calculate_nearest_station(crimes_df, stations_df):
             crimes_gdf = gpd.GeoDataFrame(
                 crimes_df,
                 geometry=gpd.points_from_xy(
-                    crimes_df['x_coordinate'].astype(float),
-                    crimes_df['y_coordinate'].astype(float)
+                    crimes_df["x_coordinate"].astype(float),
+                    crimes_df["y_coordinate"].astype(float),
                 ),
-                crs="EPSG:3435"  # Illinois State Plane (feet) - adjust if needed
+                crs="EPSG:3435",  # Illinois State Plane (feet) - adjust if needed
             )
 
             stations_gdf = gpd.GeoDataFrame(
                 stations_df,
                 geometry=gpd.points_from_xy(
-                    stations_df['x_coordinate'].astype(float),
-                    stations_df['y_coordinate'].astype(float)
+                    stations_df["x_coordinate"].astype(float),
+                    stations_df["y_coordinate"].astype(float),
                 ),
-                crs="EPSG:3435"
+                crs="EPSG:3435",
             )
         else:
             # Fallback to lat/lon and convert to projected CRS
@@ -57,19 +62,19 @@ def calculate_nearest_station(crimes_df, stations_df):
             crimes_gdf = gpd.GeoDataFrame(
                 crimes_df,
                 geometry=gpd.points_from_xy(
-                    crimes_df['longitude'].astype(float),
-                    crimes_df['latitude'].astype(float)
+                    crimes_df["longitude"].astype(float),
+                    crimes_df["latitude"].astype(float),
                 ),
-                crs="EPSG:4326"
+                crs="EPSG:4326",
             )
 
             stations_gdf = gpd.GeoDataFrame(
                 stations_df,
                 geometry=gpd.points_from_xy(
-                    stations_df['longitude'].astype(float),
-                    stations_df['latitude'].astype(float)
+                    stations_df["longitude"].astype(float),
+                    stations_df["latitude"].astype(float),
                 ),
-                crs="EPSG:4326"
+                crs="EPSG:4326",
             )
 
             # Convert to projected CRS for Chicago
@@ -79,19 +84,21 @@ def calculate_nearest_station(crimes_df, stations_df):
         # Perform spatial join to find nearest station
         crimes_with_stations = gpd.sjoin_nearest(
             crimes_gdf,
-            stations_gdf[['district', 'district_name', 'geometry']],
-            how='left',
-            distance_col='distance_crime_to_police_station'
+            stations_gdf[["district", "district_name", "geometry"]],
+            how="left",
+            distance_col="distance_crime_to_police_station",
         )
 
         # Convert back to regular DataFrame
-        result_df = pd.DataFrame(crimes_with_stations.drop(columns='geometry'))
+        result_df = pd.DataFrame(crimes_with_stations.drop(columns="geometry"))
 
         # Rename columns to match expected format
-        result_df = result_df.rename(columns={
-            'district': 'nearest_police_station_district',
-            'district_name': 'nearest_police_station_district_name'
-        })
+        result_df = result_df.rename(
+            columns={
+                "district": "nearest_police_station_district",
+                "district_name": "nearest_police_station_district_name",
+            }
+        )
 
         logger.info(f"Calculated distances for {len(result_df)} crime records")
         return result_df
@@ -116,41 +123,41 @@ def create_temporal_features(df):
 
     try:
         # Convert date to datetime
-        df['date'] = pd.to_datetime(df['date'])
+        df["date"] = pd.to_datetime(df["date"])
 
         # Extract month and hour
-        df['month'] = df['date'].dt.month
-        df['hour'] = df['date'].dt.hour
-        df['day_of_week'] = df['date'].dt.dayofweek  # 0=Monday, 6=Sunday
+        df["month"] = df["date"].dt.month
+        df["hour"] = df["date"].dt.hour
+        df["day_of_week"] = df["date"].dt.dayofweek  # 0=Monday, 6=Sunday
 
         # Create Season feature
         def get_season(month):
             if month in [12, 1, 2]:
-                return 'Winter'
+                return "Winter"
             elif month in [3, 4, 5]:
-                return 'Spring'
+                return "Spring"
             elif month in [6, 7, 8]:
-                return 'Summer'
+                return "Summer"
             else:  # 9, 10, 11
-                return 'Fall'
+                return "Fall"
 
-        df['season'] = df['month'].apply(get_season)
+        df["season"] = df["month"].apply(get_season)
 
         # Create Day Time feature (4 periods)
         def get_day_time(hour):
             if 6 <= hour < 12:
-                return 'Morning'
+                return "Morning"
             elif 12 <= hour < 18:
-                return 'Afternoon'
+                return "Afternoon"
             elif 18 <= hour < 24:
-                return 'Evening'
+                return "Evening"
             else:  # 0-5
-                return 'Night'
+                return "Night"
 
-        df['day_time'] = df['hour'].apply(get_day_time)
+        df["day_time"] = df["hour"].apply(get_day_time)
 
         # Drop temporary columns
-        df = df.drop(columns=['month', 'hour'])
+        df = df.drop(columns=["month", "hour"])
 
         logger.info("Temporal features created: season, day_of_week, day_time")
         return df
@@ -176,27 +183,27 @@ def clean_and_select_columns(df):
     try:
         # Define columns to keep (based on notebook 1)
         columns_to_keep = [
-            'date',
-            'primary_type',
-            'description',
-            'location_description',
-            'arrest',
-            'domestic',
-            'beat',
-            'district',
-            'ward',
-            'community_area',
-            'fbi_code',
-            'x_coordinate',
-            'y_coordinate',
-            'latitude',
-            'longitude',
-            'distance_crime_to_police_station',
-            'nearest_police_station_district',
-            'nearest_police_station_district_name',
-            'season',
-            'day_of_week',
-            'day_time'
+            "date",
+            "primary_type",
+            "description",
+            "location_description",
+            "arrest",
+            "domestic",
+            "beat",
+            "district",
+            "ward",
+            "community_area",
+            "fbi_code",
+            "x_coordinate",
+            "y_coordinate",
+            "latitude",
+            "longitude",
+            "distance_crime_to_police_station",
+            "nearest_police_station_district",
+            "nearest_police_station_district_name",
+            "season",
+            "day_of_week",
+            "day_time",
         ]
 
         # Keep only columns that exist in the dataframe
@@ -204,20 +211,31 @@ def clean_and_select_columns(df):
         df_cleaned = df[existing_columns].copy()
 
         # Convert boolean columns to proper type
-        if 'arrest' in df_cleaned.columns:
-            df_cleaned['arrest'] = df_cleaned['arrest'].astype(str).str.lower() == 'true'
+        if "arrest" in df_cleaned.columns:
+            df_cleaned["arrest"] = (
+                df_cleaned["arrest"].astype(str).str.lower() == "true"
+            )
 
-        if 'domestic' in df_cleaned.columns:
-            df_cleaned['domestic'] = df_cleaned['domestic'].astype(str).str.lower() == 'true'
+        if "domestic" in df_cleaned.columns:
+            df_cleaned["domestic"] = (
+                df_cleaned["domestic"].astype(str).str.lower() == "true"
+            )
 
         # Convert numeric columns
-        numeric_cols = ['x_coordinate', 'y_coordinate', 'latitude', 'longitude',
-                       'distance_crime_to_police_station']
+        numeric_cols = [
+            "x_coordinate",
+            "y_coordinate",
+            "latitude",
+            "longitude",
+            "distance_crime_to_police_station",
+        ]
         for col in numeric_cols:
             if col in df_cleaned.columns:
-                df_cleaned[col] = pd.to_numeric(df_cleaned[col], errors='coerce')
+                df_cleaned[col] = pd.to_numeric(df_cleaned[col], errors="coerce")
 
-        logger.info(f"Cleaned data: {len(df_cleaned)} records, {len(df_cleaned.columns)} columns")
+        logger.info(
+            f"Cleaned data: {len(df_cleaned)} records, {len(df_cleaned.columns)} columns"
+        )
         return df_cleaned
 
     except Exception as e:

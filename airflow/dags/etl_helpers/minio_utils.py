@@ -24,16 +24,16 @@ def get_minio_client():
     Returns:
         boto3.client: Configured S3 client for MinIO
     """
-    access_key = os.getenv('AWS_ACCESS_KEY_ID', 'minio')
-    secret_key = os.getenv('AWS_SECRET_ACCESS_KEY', 'minio123')
-    endpoint_url = os.getenv('MLFLOW_S3_ENDPOINT_URL', 'http://s3:9000')
+    access_key = os.getenv("AWS_ACCESS_KEY_ID", "minio")
+    secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", "minio123")
+    endpoint_url = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://s3:9000")
 
     client = boto3.client(
-        's3',
+        "s3",
         endpoint_url=endpoint_url,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        region_name='us-east-1'  # MinIO doesn't require specific region
+        region_name="us-east-1",  # MinIO doesn't require specific region
     )
 
     logger.info(f"MinIO client initialized with endpoint: {endpoint_url}")
@@ -59,28 +59,33 @@ def set_bucket_lifecycle_policy(bucket_name, prefixes, expiration_days):
 
     rules = []
     for idx, prefix in enumerate(prefixes):
-        rules.append({
-            'ID': f'Delete-{prefix.replace("/", "-")}-after-{expiration_days}-days',
-            'Status': 'Enabled',
-            'Filter': {'Prefix': prefix},
-            'Expiration': {'Days': expiration_days}
-        })
+        rules.append(
+            {
+                "ID": f"Delete-{prefix.replace('/', '-')}-after-{expiration_days}-days",
+                "Status": "Enabled",
+                "Filter": {"Prefix": prefix},
+                "Expiration": {"Days": expiration_days},
+            }
+        )
 
-    lifecycle_config = {'Rules': rules}
+    lifecycle_config = {"Rules": rules}
 
     try:
         client.put_bucket_lifecycle_configuration(
-            Bucket=bucket_name,
-            LifecycleConfiguration=lifecycle_config
+            Bucket=bucket_name, LifecycleConfiguration=lifecycle_config
         )
-        logger.info(f"Lifecycle policy set for '{bucket_name}': {len(prefixes)} prefixes with {expiration_days} days TTL")
+        logger.info(
+            f"Lifecycle policy set for '{bucket_name}': {len(prefixes)} prefixes with {expiration_days} days TTL"
+        )
         return True
     except Exception as e:
         logger.error(f"Error setting lifecycle policy: {e}")
         raise
 
 
-def create_bucket_if_not_exists(bucket_name, lifecycle_prefix=None, lifecycle_days=None):
+def create_bucket_if_not_exists(
+    bucket_name, lifecycle_prefix=None, lifecycle_days=None
+):
     """
     Create a MinIO bucket if it doesn't already exist.
     Optionally set lifecycle policy for automatic file deletion.
@@ -99,8 +104,8 @@ def create_bucket_if_not_exists(bucket_name, lifecycle_prefix=None, lifecycle_da
         client.head_bucket(Bucket=bucket_name)
         logger.info(f"Bucket '{bucket_name}' already exists")
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == '404':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "404":
             try:
                 client.create_bucket(Bucket=bucket_name)
                 logger.info(f"Bucket '{bucket_name}' created successfully")
@@ -145,7 +150,9 @@ def upload_to_minio(file_path, bucket_name, object_key):
         # Upload file
         client.upload_file(file_path, bucket_name, object_key)
         file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
-        logger.info(f"Uploaded '{file_path}' ({file_size:.2f} MB) to '{bucket_name}/{object_key}'")
+        logger.info(
+            f"Uploaded '{file_path}' ({file_size:.2f} MB) to '{bucket_name}/{object_key}'"
+        )
         return True
 
     except Exception as e:
@@ -177,12 +184,14 @@ def download_from_minio(bucket_name, object_key, file_path):
         # Download file
         client.download_file(bucket_name, object_key, file_path)
         file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
-        logger.info(f"Downloaded '{bucket_name}/{object_key}' ({file_size:.2f} MB) to '{file_path}'")
+        logger.info(
+            f"Downloaded '{bucket_name}/{object_key}' ({file_size:.2f} MB) to '{file_path}'"
+        )
         return True
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == '404':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "404":
             logger.warning(f"Object not found: '{bucket_name}/{object_key}'")
         else:
             logger.error(f"Error downloading file from MinIO: {e}")
@@ -210,8 +219,8 @@ def check_file_exists(bucket_name, object_key):
         logger.info(f"File exists: '{bucket_name}/{object_key}'")
         return True
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == '404':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "404":
             logger.info(f"File does not exist: '{bucket_name}/{object_key}'")
             return False
         else:
@@ -219,7 +228,7 @@ def check_file_exists(bucket_name, object_key):
             raise
 
 
-def list_objects(bucket_name, prefix=''):
+def list_objects(bucket_name, prefix=""):
     """
     List objects in a MinIO bucket with optional prefix filter.
 
@@ -235,12 +244,14 @@ def list_objects(bucket_name, prefix=''):
     try:
         response = client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
 
-        if 'Contents' not in response:
+        if "Contents" not in response:
             logger.info(f"No objects found in '{bucket_name}' with prefix '{prefix}'")
             return []
 
-        objects = [obj['Key'] for obj in response['Contents']]
-        logger.info(f"Found {len(objects)} objects in '{bucket_name}' with prefix '{prefix}'")
+        objects = [obj["Key"] for obj in response["Contents"]]
+        logger.info(
+            f"Found {len(objects)} objects in '{bucket_name}' with prefix '{prefix}'"
+        )
         return objects
 
     except Exception as e:
@@ -295,19 +306,21 @@ def download_to_dataframe(bucket_name, object_key):
 
         # Download object to memory
         response = client.get_object(Bucket=bucket_name, Key=object_key)
-        csv_bytes = response['Body'].read()
+        csv_bytes = response["Body"].read()
 
         # Convert to DataFrame
         df = pd.read_csv(BytesIO(csv_bytes))
 
         file_size = len(csv_bytes) / (1024 * 1024)  # MB
-        logger.info(f"Downloaded {len(df)} records ({file_size:.2f} MB) from '{bucket_name}/{object_key}'")
+        logger.info(
+            f"Downloaded {len(df)} records ({file_size:.2f} MB) from '{bucket_name}/{object_key}'"
+        )
 
         return df
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == '404':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "404":
             logger.error(f"Object not found: '{bucket_name}/{object_key}'")
         else:
             logger.error(f"Error downloading to DataFrame: {e}")
@@ -345,19 +358,22 @@ def upload_from_dataframe(df, bucket_name, object_key, index=False):
         # Convert DataFrame to CSV in memory
         csv_buffer = StringIO()
         df.to_csv(csv_buffer, index=index)
-        csv_bytes = csv_buffer.getvalue().encode('utf-8')
+        csv_bytes = csv_buffer.getvalue().encode("utf-8")
 
         # Upload to MinIO
         from io import BytesIO
+
         client.put_object(
             Bucket=bucket_name,
             Key=object_key,
             Body=BytesIO(csv_bytes),
-            ContentLength=len(csv_bytes)
+            ContentLength=len(csv_bytes),
         )
 
         file_size = len(csv_bytes) / (1024 * 1024)  # MB
-        logger.info(f"Uploaded {len(df)} records ({file_size:.2f} MB) to '{bucket_name}/{object_key}'")
+        logger.info(
+            f"Uploaded {len(df)} records ({file_size:.2f} MB) to '{bucket_name}/{object_key}'"
+        )
 
         return True
 
