@@ -1,4 +1,4 @@
-.PHONY: help up down restart install clean logs status airflow mlflow minio
+.PHONY: help up down restart install clean logs status airflow mlflow minio lint format
 
 help:
 	@echo "Available commands:"
@@ -9,6 +9,10 @@ help:
 	@echo "  make clean     - Stop and remove all containers, networks, and volumes"
 	@echo "  make logs      - Follow logs from all services"
 	@echo "  make status    - Show status of all services"
+	@echo ""
+	@echo "Code quality:"
+	@echo "  make lint      - Run ruff linter on Python code"
+	@echo "  make format    - Format Python code with ruff"
 	@echo ""
 	@echo "Open web interfaces:"
 	@echo "  make airflow   - Open Airflow UI (http://localhost:8080)"
@@ -49,3 +53,12 @@ mlflow:
 minio:
 	@echo "Opening MinIO UI..."
 	@open http://localhost:9001 || xdg-open http://localhost:9001 2>/dev/null || echo "Please open http://localhost:9001 in your browser"
+
+lint:
+	@echo "Running ruff linter..."
+	ruff check airflow/
+
+format:
+	@echo "Formatting Python code with ruff..."
+	ruff format airflow/
+	ruff check --fix airflow/

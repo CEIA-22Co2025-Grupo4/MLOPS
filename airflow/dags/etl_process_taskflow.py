@@ -5,14 +5,14 @@ import pandas as pd
 from airflow.decorators import dag, task
 from etl_helpers.minio_utils import (
     upload_to_minio,
-    download_from_minio,
     list_objects,
     create_bucket_if_not_exists,
     download_to_dataframe,
     upload_from_dataframe,
+    check_file_exists,
+    set_bucket_lifecycle_policy,
 )
 from etl_helpers.data_loader import (
-    download_crimes_full,
     download_crimes_incremental,
     download_police_stations,
 )
@@ -24,15 +24,15 @@ from etl_helpers.outlier_processing import process_outliers as process_outliers_
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
 
 # Bucket structure
-PREFIX_RAW_MONTHLY = "0-raw-data/monthly-data/"
-PREFIX_RAW_MERGED = "0-raw-data/data/"
-PREFIX_ENRICHED = "1-enriched-data/"
-PREFIX_SPLIT = "2-split-data/"
-PREFIX_OUTLIERS = "3-outliers/"
+PREFIX_RAW = "0-raw-data/"
+PREFIX_MERGED = "1-merged-data/"
+PREFIX_ENRICHED = "2-enriched-data/"
+PREFIX_SPLIT = "3-split-data/"
+PREFIX_OUTLIERS = "4-outliers/"
 
 # Data processing parameters
-LIFECYCLE_TTL_DAYS = 60
-ROLLING_WINDOW_DAYS = 365
+LIFECYCLE_TTL_DAYS = 60  # All files deleted after 60 days
+ROLLING_WINDOW_DAYS = 365  # Merged data contains 365 days of crimes
 TARGET_COLUMN = "arrest"  # ML target variable
 SPLIT_TEST_SIZE = 0.2
 SPLIT_RANDOM_STATE = 42
@@ -60,59 +60,70 @@ default_args = {
 def process_etl_taskflow():
     @task.python
     def setup_s3():
-        """Setup MinIO buckets with TTL."""
-        lifecycle_prefixes = [
-            PREFIX_RAW_MONTHLY,
-            PREFIX_RAW_MERGED,
+        """Setup MinIO bucket with TTL for all prefixes."""
+        all_prefixes = [
+            PREFIX_RAW,
+            PREFIX_MERGED,
             PREFIX_ENRICHED,
             PREFIX_SPLIT,
             PREFIX_OUTLIERS,
         ]
 
-        create_bucket_if_not_exists(
-            BUCKET_NAME,
-            lifecycle_prefix=lifecycle_prefixes,
-            lifecycle_days=LIFECYCLE_TTL_DAYS,
-        )
-        print(
-            f"S3 setup completed: bucket '{BUCKET_NAME}' with {LIFECYCLE_TTL_DAYS}-day TTL"
-        )
+        create_bucket_if_not_exists(BUCKET_NAME)
+        set_bucket_lifecycle_policy(BUCKET_NAME, all_prefixes, LIFECYCLE_TTL_DAYS)
 
     @task.python
     def download_data(**context):
-        """Download crime data - full year on first run, incremental on subsequent runs."""
-        # Check if this is first run (no existing merged files)
-        existing_merged = list_objects(
-            BUCKET_NAME, prefix=f"{PREFIX_RAW_MERGED}crimes_12m_"
-        )
-        is_first_run = len(existing_merged) == 0
-
+        """Download crime and police station data for the current period."""
         start_date = context["data_interval_start"]
         end_date = context["data_interval_end"]
         month_folder = start_date.strftime("%Y-%m")
 
+        # Define output paths
+        crimes_key = f"{PREFIX_RAW}{month_folder}/crimes.csv"
+        stations_key = f"{PREFIX_RAW}police_stations.csv"
+
+        # Check if already downloaded (idempotent)
+        if check_file_exists(BUCKET_NAME, crimes_key):
+            crimes_df = download_to_dataframe(BUCKET_NAME, crimes_key)
+            return {
+                "status": "success",
+                "crimes_file": crimes_key,
+                "stations_file": stations_key,
+                "records": len(crimes_df),
+            }
+
+        # Determine download date range
+        existing_merged = list_objects(
+            BUCKET_NAME, prefix=f"{PREFIX_MERGED}crimes_12m_"
+        )
+
+        if len(existing_merged) == 0:
+            # No existing data - download full rolling window
+            download_start = end_date - datetime.timedelta(days=ROLLING_WINDOW_DAYS)
+            download_end = end_date
+        else:
+            # Use scheduled interval
+            download_start = start_date
+            download_end = end_date
+
+        # Download data to temp files
         crimes_temp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False)
         stations_temp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".csv", delete=False
         )
 
         try:
-            if is_first_run:
-                crimes_df = download_crimes_full(output_file=crimes_temp.name)
-                crimes_key = f"{PREFIX_RAW_MONTHLY}{month_folder}/crimes_full.csv"
-            else:
-                crimes_df = download_crimes_incremental(
-                    start_date, end_date, output_file=crimes_temp.name
-                )
+            # Download crimes (always use incremental with appropriate date range)
+            crimes_df = download_crimes_incremental(
+                download_start, download_end, output_file=crimes_temp.name
+            )
 
-                if len(crimes_df) == 0:
-                    return {"status": "no_data", "records": 0}
-
-                crimes_key = f"{PREFIX_RAW_MONTHLY}{month_folder}/crimes.csv"
+            if len(crimes_df) == 0:
+                return {"status": "no_data", "records": 0}
 
             # Download police stations
-            stations_df = download_police_stations(output_file=stations_temp.name)
-            stations_key = f"{PREFIX_RAW_MONTHLY}{month_folder}/police_stations.csv"
+            download_police_stations(output_file=stations_temp.name)
 
             # Upload to MinIO
             upload_to_minio(crimes_temp.name, BUCKET_NAME, crimes_key)
@@ -120,11 +131,9 @@ def process_etl_taskflow():
 
             return {
                 "status": "success",
-                "is_first_run": is_first_run,
-                "month_folder": month_folder,
                 "crimes_file": crimes_key,
                 "stations_file": stations_key,
-                "crime_records": len(crimes_df),
+                "records": len(crimes_df),
             }
         finally:
             if os.path.exists(crimes_temp.name):
@@ -135,28 +144,41 @@ def process_etl_taskflow():
     @task.python
     def merge_data(download_result, **context):
         """Merge downloaded data into rolling 12-month window."""
+        run_date = context["ds"]
+        merged_key = f"{PREFIX_MERGED}crimes_12m_{run_date}.csv"
+
+        # Check if merged file already exists (idempotent)
+        if check_file_exists(BUCKET_NAME, merged_key):
+            merged_df = download_to_dataframe(BUCKET_NAME, merged_key)
+            return {
+                "status": "success",
+                "merged_file": merged_key,
+                "stations_file": download_result.get("stations_file"),
+                "records": len(merged_df),
+            }
+
+        # Check if upstream returned no_data
         if download_result.get("status") == "no_data":
             return {"status": "no_data"}
-
-        run_date = context["ds"]  # Airflow execution date (YYYY-MM-DD)
-        is_first_run = download_result.get("is_first_run", False)
 
         # Load newly downloaded data
         df_new = download_to_dataframe(BUCKET_NAME, download_result["crimes_file"])
 
-        if is_first_run:
+        # Check for existing merged data
+        existing_merged = list_objects(
+            BUCKET_NAME, prefix=f"{PREFIX_MERGED}crimes_12m_"
+        )
+
+        if len(existing_merged) == 0:
+            # First merge - use downloaded data as-is
             merged_df = df_new
         else:
-            # Merge with existing data
-            existing_merged = list_objects(
-                BUCKET_NAME, prefix=f"{PREFIX_RAW_MERGED}crimes_12m_"
-            )
+            # Merge with latest existing data
             latest_merged = sorted(existing_merged)[-1]
-
             df_existing = download_to_dataframe(BUCKET_NAME, latest_merged)
             merged_df = pd.concat([df_existing, df_new], ignore_index=True)
 
-            # Filter to rolling window
+            # Apply rolling window filter
             merged_df["date"] = pd.to_datetime(merged_df["date"])
             cutoff_date = datetime.datetime.now() - datetime.timedelta(
                 days=ROLLING_WINDOW_DAYS
@@ -164,56 +186,75 @@ def process_etl_taskflow():
             merged_df = merged_df[merged_df["date"] >= cutoff_date]
 
         # Save merged data
-        output_key = f"{PREFIX_RAW_MERGED}crimes_12m_{run_date}.csv"
-        upload_from_dataframe(merged_df, BUCKET_NAME, output_key)
+        upload_from_dataframe(merged_df, BUCKET_NAME, merged_key)
 
         return {
             "status": "success",
-            "merged_file": output_key,
+            "merged_file": merged_key,
+            "stations_file": download_result["stations_file"],
             "records": len(merged_df),
-            "run_date": run_date,
         }
 
     @task.python
-    def enrich_data(merge_result, download_result, **context):
+    def enrich_data(merge_result, **context):
         """Add nearest station info and temporal features to crime data."""
+        run_date = context["ds"]
+        enriched_key = f"{PREFIX_ENRICHED}crimes_enriched_{run_date}.csv"
+
+        # Check if enriched file already exists (idempotent)
+        if check_file_exists(BUCKET_NAME, enriched_key):
+            enriched_df = download_to_dataframe(BUCKET_NAME, enriched_key)
+            return {
+                "status": "success",
+                "enriched_file": enriched_key,
+                "records": len(enriched_df),
+            }
+
+        # Check if upstream returned no_data
         if merge_result.get("status") == "no_data":
             return {"status": "no_data"}
 
-        run_date = context["ds"]  # Airflow execution date (YYYY-MM-DD)
-
-        # Load data
+        # Process data
         crimes_df = download_to_dataframe(BUCKET_NAME, merge_result["merged_file"])
-        stations_df = download_to_dataframe(
-            BUCKET_NAME, download_result["stations_file"]
-        )
-
-        # Enrich data
+        stations_df = download_to_dataframe(BUCKET_NAME, merge_result["stations_file"])
         enriched_df = enrich_crime_data(crimes_df, stations_df)
 
         # Upload enriched data
-        enriched_key = f"{PREFIX_ENRICHED}crimes_enriched_{run_date}.csv"
         upload_from_dataframe(enriched_df, BUCKET_NAME, enriched_key)
 
         return {
             "status": "success",
             "enriched_file": enriched_key,
             "records": len(enriched_df),
-            "run_date": run_date,
         }
 
     @task.python
     def split_data(enrich_result, **context):
         """Split dataset into train and test sets with stratification."""
+        run_date = context["ds"]
+        train_key = f"{PREFIX_SPLIT}crimes_train_{run_date}.csv"
+        test_key = f"{PREFIX_SPLIT}crimes_test_{run_date}.csv"
+
+        # Check if split files already exist (idempotent)
+        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
+            BUCKET_NAME, test_key
+        ):
+            train_df = download_to_dataframe(BUCKET_NAME, train_key)
+            test_df = download_to_dataframe(BUCKET_NAME, test_key)
+            return {
+                "status": "success",
+                "train_file": train_key,
+                "test_file": test_key,
+                "train_records": len(train_df),
+                "test_records": len(test_df),
+            }
+
+        # Check if upstream returned no_data
         if enrich_result.get("status") == "no_data":
             return {"status": "no_data"}
 
-        run_date = context["ds"]  # Airflow execution date (YYYY-MM-DD)
-
-        # Load enriched data
+        # Process data
         df_enriched = download_to_dataframe(BUCKET_NAME, enrich_result["enriched_file"])
-
-        # Preprocess and split
         df_clean = preprocess_for_split(df_enriched)
         train_df, test_df = split_train_test(
             df_clean,
@@ -223,9 +264,6 @@ def process_etl_taskflow():
         )
 
         # Upload train and test datasets
-        train_key = f"{PREFIX_SPLIT}crimes_train_{run_date}.csv"
-        test_key = f"{PREFIX_SPLIT}crimes_test_{run_date}.csv"
-
         upload_from_dataframe(train_df, BUCKET_NAME, train_key)
         upload_from_dataframe(test_df, BUCKET_NAME, test_key)
 
@@ -235,33 +273,44 @@ def process_etl_taskflow():
             "test_file": test_key,
             "train_records": len(train_df),
             "test_records": len(test_df),
-            "run_date": run_date,
         }
 
     @task.python
     def process_outliers(split_result, **context):
         """
         Process outliers using log transformation and standard deviation method.
-        Processes both train and test datasets using train statistics to avoid data leakage.
+        Uses train statistics for both datasets to avoid data leakage.
         """
+        run_date = context["ds"]
+        train_key = f"{PREFIX_OUTLIERS}crimes_train_no_outliers_{run_date}.csv"
+        test_key = f"{PREFIX_OUTLIERS}crimes_test_no_outliers_{run_date}.csv"
+
+        # Check if processed files already exist (idempotent)
+        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
+            BUCKET_NAME, test_key
+        ):
+            train_processed = download_to_dataframe(BUCKET_NAME, train_key)
+            test_processed = download_to_dataframe(BUCKET_NAME, test_key)
+            return {
+                "status": "success",
+                "train_file": train_key,
+                "test_file": test_key,
+                "train_records": len(train_processed),
+                "test_records": len(test_processed),
+            }
+
+        # Check if upstream returned no_data
         if split_result.get("status") == "no_data":
             return {"status": "no_data"}
 
-        run_date = context["ds"]  # Airflow execution date (YYYY-MM-DD)
-
-        # Load train and test data
+        # Process data
         train_df = download_to_dataframe(BUCKET_NAME, split_result["train_file"])
         test_df = download_to_dataframe(BUCKET_NAME, split_result["test_file"])
-
-        # Process outliers (uses train stats for both to avoid data leakage)
         train_processed, test_processed = process_outliers_fn(
             train_df, test_df, n_std=OUTLIER_STD_THRESHOLD
         )
 
         # Upload processed datasets
-        train_key = f"{PREFIX_OUTLIERS}crimes_train_no_outliers_{run_date}.csv"
-        test_key = f"{PREFIX_OUTLIERS}crimes_test_no_outliers_{run_date}.csv"
-
         upload_from_dataframe(train_processed, BUCKET_NAME, train_key)
         upload_from_dataframe(test_processed, BUCKET_NAME, test_key)
 
@@ -271,7 +320,6 @@ def process_etl_taskflow():
             "test_file": test_key,
             "train_records": len(train_processed),
             "test_records": len(test_processed),
-            "run_date": run_date,
         }
 
     @task.python(multiple_outputs=True)
@@ -298,7 +346,7 @@ def process_etl_taskflow():
     s3_setup = setup_s3()
     downloaded = download_data()
     merged = merge_data(downloaded)
-    enriched = enrich_data(merged, downloaded)
+    enriched = enrich_data(merged)
     split = split_data(enriched)
     outliers = process_outliers(split)
     encoded = encode_data()

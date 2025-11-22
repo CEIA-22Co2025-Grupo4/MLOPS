@@ -4,7 +4,6 @@ Outlier Processing Functions
 Functions for detecting and removing outliers from crime data.
 """
 
-import pandas as pd
 import numpy as np
 import logging
 
@@ -142,6 +141,6 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     logger.info(
         f"Test: removed {test_removed} outliers ({100 * test_removed / test_initial:.2f}%)"
     )
-    logger.info(f"Outlier processing completed")
+    logger.info("Outlier processing completed")
 
     return train_processed, test_processed

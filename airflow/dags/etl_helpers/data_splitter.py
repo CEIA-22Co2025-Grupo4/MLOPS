@@ -4,7 +4,6 @@ Data Splitting Functions
 Functions for preprocessing and splitting Chicago crime data into train/test sets.
 """
 
-import pandas as pd
 import logging
 from sklearn.model_selection import train_test_split
 
