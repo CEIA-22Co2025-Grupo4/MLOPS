@@ -19,6 +19,7 @@ from etl_helpers.data_loader import (
 from etl_helpers.data_enrichment import enrich_crime_data
 from etl_helpers.data_splitter import preprocess_for_split, split_train_test
 from etl_helpers.outlier_processing import process_outliers as process_outliers_fn
+from etl_helpers.data_encoding import encode_data as encode_data_fn
 
 # Configuration
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
@@ -29,6 +30,7 @@ PREFIX_MERGED = "1-merged-data/"
 PREFIX_ENRICHED = "2-enriched-data/"
 PREFIX_SPLIT = "3-split-data/"
 PREFIX_OUTLIERS = "4-outliers/"
+PREFIX_ENCODED = "5-encoded/"
 
 # Data processing parameters
 LIFECYCLE_TTL_DAYS = 60  # All files deleted after 60 days
@@ -67,6 +69,7 @@ def process_etl_taskflow():
             PREFIX_ENRICHED,
             PREFIX_SPLIT,
             PREFIX_OUTLIERS,
+            PREFIX_ENCODED,
         ]
 
         create_bucket_if_not_exists(BUCKET_NAME)
@@ -85,12 +88,10 @@ def process_etl_taskflow():
 
         # Check if already downloaded (idempotent)
         if check_file_exists(BUCKET_NAME, crimes_key):
-            crimes_df = download_to_dataframe(BUCKET_NAME, crimes_key)
             return {
                 "status": "success",
                 "crimes_file": crimes_key,
                 "stations_file": stations_key,
-                "records": len(crimes_df),
             }
 
         # Determine download date range
@@ -133,7 +134,6 @@ def process_etl_taskflow():
                 "status": "success",
                 "crimes_file": crimes_key,
                 "stations_file": stations_key,
-                "records": len(crimes_df),
             }
         finally:
             if os.path.exists(crimes_temp.name):
@@ -149,12 +149,10 @@ def process_etl_taskflow():
 
         # Check if merged file already exists (idempotent)
         if check_file_exists(BUCKET_NAME, merged_key):
-            merged_df = download_to_dataframe(BUCKET_NAME, merged_key)
             return {
                 "status": "success",
                 "merged_file": merged_key,
                 "stations_file": download_result.get("stations_file"),
-                "records": len(merged_df),
             }
 
         # Check if upstream returned no_data
@@ -192,7 +190,6 @@ def process_etl_taskflow():
             "status": "success",
             "merged_file": merged_key,
             "stations_file": download_result["stations_file"],
-            "records": len(merged_df),
         }
 
     @task.python
@@ -203,11 +200,9 @@ def process_etl_taskflow():
 
         # Check if enriched file already exists (idempotent)
         if check_file_exists(BUCKET_NAME, enriched_key):
-            enriched_df = download_to_dataframe(BUCKET_NAME, enriched_key)
             return {
                 "status": "success",
                 "enriched_file": enriched_key,
-                "records": len(enriched_df),
             }
 
         # Check if upstream returned no_data
@@ -225,7 +220,6 @@ def process_etl_taskflow():
         return {
             "status": "success",
             "enriched_file": enriched_key,
-            "records": len(enriched_df),
         }
 
     @task.python
@@ -239,14 +233,10 @@ def process_etl_taskflow():
         if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
             BUCKET_NAME, test_key
         ):
-            train_df = download_to_dataframe(BUCKET_NAME, train_key)
-            test_df = download_to_dataframe(BUCKET_NAME, test_key)
             return {
                 "status": "success",
                 "train_file": train_key,
                 "test_file": test_key,
-                "train_records": len(train_df),
-                "test_records": len(test_df),
             }
 
         # Check if upstream returned no_data
@@ -271,14 +261,12 @@ def process_etl_taskflow():
             "status": "success",
             "train_file": train_key,
             "test_file": test_key,
-            "train_records": len(train_df),
-            "test_records": len(test_df),
         }
 
     @task.python
     def process_outliers(split_result, **context):
         """
-        Process outliers using log transformation and standard deviation method.
+        Remove outliers using standard deviation method (±3σ).
         Uses train statistics for both datasets to avoid data leakage.
         """
         run_date = context["ds"]
@@ -289,14 +277,10 @@ def process_etl_taskflow():
         if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
             BUCKET_NAME, test_key
         ):
-            train_processed = download_to_dataframe(BUCKET_NAME, train_key)
-            test_processed = download_to_dataframe(BUCKET_NAME, test_key)
             return {
                 "status": "success",
                 "train_file": train_key,
                 "test_file": test_key,
-                "train_records": len(train_processed),
-                "test_records": len(test_processed),
             }
 
         # Check if upstream returned no_data
@@ -318,14 +302,50 @@ def process_etl_taskflow():
             "status": "success",
             "train_file": train_key,
             "test_file": test_key,
-            "train_records": len(train_processed),
-            "test_records": len(test_processed),
         }
 
-    @task.python(multiple_outputs=True)
-    def encode_data():
-        """Encode categorical variables."""
-        print("Applying encoding...")
+    @task.python
+    def encode_data(outliers_result, **context):
+        """
+        Encode categorical and numerical variables.
+        - Log transformation: distance_crime_to_police_station
+        - Cyclic encoding: day_of_week
+        - One-hot encoding: season, day_time
+        - Label encoding: domestic
+        - Frequency encoding: high cardinality categoricals
+        """
+        run_date = context["ds"]
+        train_key = f"{PREFIX_ENCODED}crimes_train_encoded_{run_date}.csv"
+        test_key = f"{PREFIX_ENCODED}crimes_test_encoded_{run_date}.csv"
+
+        # Check if encoded files already exist (idempotent)
+        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
+            BUCKET_NAME, test_key
+        ):
+            return {
+                "status": "success",
+                "train_file": train_key,
+                "test_file": test_key,
+            }
+
+        # Check if upstream returned no_data
+        if outliers_result.get("status") == "no_data":
+            return {"status": "no_data"}
+
+        # Process data
+        train_df = download_to_dataframe(BUCKET_NAME, outliers_result["train_file"])
+        test_df = download_to_dataframe(BUCKET_NAME, outliers_result["test_file"])
+        train_encoded, test_encoded = encode_data_fn(train_df, test_df)
+
+        # Upload encoded datasets
+        upload_from_dataframe(train_encoded, BUCKET_NAME, train_key)
+        upload_from_dataframe(test_encoded, BUCKET_NAME, test_key)
+
+        return {
+            "status": "success",
+            "train_file": train_key,
+            "test_file": test_key,
+        }
 
     @task.python(multiple_outputs=True)
     def scale_data():
@@ -349,7 +369,7 @@ def process_etl_taskflow():
     enriched = enrich_data(merged)
     split = split_data(enriched)
     outliers = process_outliers(split)
-    encoded = encode_data()
+    encoded = encode_data(outliers)
     scaled = scale_data()
     balanced = balance_data()
     features = extract_features()

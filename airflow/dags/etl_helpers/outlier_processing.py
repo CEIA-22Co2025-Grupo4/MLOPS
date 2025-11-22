@@ -81,13 +81,12 @@ def remove_outliers_std_method(df, column=DISTANCE_COLUMN, n_std=3):
 
 def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     """
-    Process outliers for both train and test datasets.
+    Remove outliers from both train and test datasets.
     Uses statistics from train data only to avoid data leakage.
 
     Steps:
-    1. Apply log transformation to both datasets
-    2. Calculate statistics from TRAIN data
-    3. Remove outliers from BOTH datasets using train statistics
+    1. Calculate statistics from TRAIN data
+    2. Remove outliers from BOTH datasets using train statistics
 
     Args:
         train_df (pd.DataFrame): Training dataframe
@@ -98,16 +97,15 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     Returns:
         tuple: (train_processed, test_processed) DataFrames
     """
-    logger.info("Starting outlier processing...")
+    logger.info("Starting outlier removal...")
 
-    # Step 1: Apply log transformation
-    logger.info("Applying log transformation...")
-    train_transformed = apply_log_transformation(train_df, column)
-    test_transformed = apply_log_transformation(test_df, column)
+    if column not in train_df.columns:
+        logger.warning(f"Column '{column}' not found in DataFrame")
+        return train_df, test_df
 
-    # Step 2: Calculate statistics from TRAIN data only (avoid data leakage)
-    mean_val = train_transformed[column].mean()
-    std_val = train_transformed[column].std()
+    # Calculate statistics from TRAIN data only (avoid data leakage)
+    mean_val = train_df[column].mean()
+    std_val = train_df[column].std()
 
     lower_bound = mean_val - n_std * std_val
     upper_bound = mean_val + n_std * std_val
@@ -117,18 +115,16 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
         f"Outlier bounds (±{n_std} std): {lower_bound:.2f} to {upper_bound:.2f}"
     )
 
-    # Step 3: Remove outliers from both datasets
-    train_initial = len(train_transformed)
-    test_initial = len(test_transformed)
+    # Remove outliers from both datasets
+    train_initial = len(train_df)
+    test_initial = len(test_df)
 
-    train_processed = train_transformed[
-        (train_transformed[column] >= lower_bound)
-        & (train_transformed[column] <= upper_bound)
+    train_processed = train_df[
+        (train_df[column] >= lower_bound) & (train_df[column] <= upper_bound)
     ].copy()
 
-    test_processed = test_transformed[
-        (test_transformed[column] >= lower_bound)
-        & (test_transformed[column] <= upper_bound)
+    test_processed = test_df[
+        (test_df[column] >= lower_bound) & (test_df[column] <= upper_bound)
     ].copy()
 
     # Log results
@@ -141,6 +137,6 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     logger.info(
         f"Test: removed {test_removed} outliers ({100 * test_removed / test_initial:.2f}%)"
     )
-    logger.info("Outlier processing completed")
+    logger.info("Outlier removal completed")
 
     return train_processed, test_processed
