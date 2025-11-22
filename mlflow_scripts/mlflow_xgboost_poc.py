@@ -28,6 +28,9 @@ from sklearn.metrics import (
     classification_report
 )
 
+from skopt import BayesSearchCV
+from skopt.space import Real, Integer
+
 import xgboost as xgb
 from xgboost import XGBClassifier
 
@@ -37,7 +40,7 @@ from mlflow.models import infer_signature
 
 
 # Configuration
-MLFLOW_TRACKING_URI = "http://localhost:5001"
+MLFLOW_TRACKING_URI = "http://localhost:5000"
 EXPERIMENT_NAME = "chicago_crimes_xgboost"
 
 # Get project root directory (parent of mlflow_scripts)
@@ -214,18 +217,46 @@ def train_xgboost_with_mlflow(X_train, X_test, y_train, y_test, experiment_id):
         # Model parameters
         params = {
             'objective': 'binary:logistic',
-            'eval_metric': 'logloss',
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'n_estimators': 100,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'random_state': 42,
+            'eval_metric': ['aucpr', 'logloss'],
+            'random_state': 1337,
             'n_jobs': -1
         }
         
+        xgb_model = xgb.XGBClassifier(**params)
+
+        search_spaces = {
+            'max_depth': Integer(3, 16),                         
+            'learning_rate': Real(0.001, 1, prior='log-uniform'),  
+            'n_estimators': Integer(50, 200),                   
+            'subsample': Real(0.7, 1.0),                        
+            'colsample_bytree': Real(0.3, 0.9),                 
+            'gamma': Real(0, 2),                                
+            'min_child_weight': Integer(0, 15),                  
+            'reg_lambda': Real(0.01, 1, prior='log-uniform'), 
+            'reg_alpha': Real(0.01, 1, prior='log-uniform')      
+        }
+
+        opt = BayesSearchCV(
+            estimator = xgb_model,
+            search_spaces = search_spaces,
+            scoring = 'average_precision',
+            cv = 3,
+            n_iter = 40,        
+            n_jobs = -1,        
+            verbose = 0,
+            random_state = 1337
+        )
+
+        opt.fit(X_train, y_train)
+        
+        opt_params_as_dict = dict(opt.best_params_)
+        
+        for key in opt_params_as_dict:
+            params[key] = round(opt_params_as_dict[key], 2)
+
         # Log parameters explicitly (autolog will also log them)
         mlflow.log_params(params)
+        mlflow.log_metric("best_score", opt.best_score_)
         
         # Train model
         print("\n[*] Training XGBoost model...")
