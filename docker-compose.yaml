@@ -185,6 +185,30 @@ services:
       timeout: 10s
       retries: 3
 
+  trainer:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/trainer/Dockerfile  
+    profiles:
+      - all    
+    depends_on:
+      - mlflow
+      - s3
+    networks:
+    - backend
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY:-minio123}
+      MLFLOW_S3_ENDPOINT_URL: http://s3:9000
+      AWS_ENDPOINT_URL_S3: http://s3:9000
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MINIO_ENDPOINT: http://s3:9000
+      MINIO_BUCKET: data
+      MINIO_PREFIX: ml-ready-data
+    command: ["python", "mlflow_xgboost_poc_docker.py"]
+    volumes:
+      - ./mlflow_scripts:/trainer
+
   fastapi:
     restart: always
     build: "./dockerfiles/fastapi"
@@ -409,6 +433,7 @@ services:
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
+
 
 networks:
   frontend:
