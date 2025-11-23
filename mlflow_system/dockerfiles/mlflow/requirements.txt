@@ -13,6 +13,7 @@ azure-storage-blob==12.19.0
 
 # ML Libraries
 scikit-learn==1.4.0
+scikit-optimize==0.10.2
 xgboost==2.0.3
 pandas==2.1.4
 numpy==1.26.3
