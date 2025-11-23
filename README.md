@@ -1,12 +1,16 @@
-# Ejemplo de ambiente productivo
-### MLOps1 - CEIA - FIUBA
-Estructura de servicios para la implementación del proyecto final de MLOps1 - CEIA - FIUBA
+# Proyecto Final – Operaciones de aprendizaje automático I  
+### Implementación en ambiente productivo de un modelo de ML para la Predicción de Arrestos en Crímenes Reportados en la Ciudad de Chicago
 
-> **Nota:** Las consignas del trabajo práctico se encuentran en [CONSIGNAS.md](CONSIGNAS.md)
+---
 
-Supongamos que trabajamos para **ML Models and something more Inc.**, la cual ofrece un servicio que proporciona modelos mediante una REST API. Internamente, tanto para realizar tareas de DataOps como de MLOps, la empresa cuenta con varios servicios que ayudan a ejecutar las acciones necesarias. También dispone de un Data Lake en S3, para este caso, simularemos un S3 utilizando MinIO.
+## 👩‍💻 Autores
 
-Para simular esta empresa, utilizaremos Docker y, a través de Docker Compose, desplegaremos varios contenedores que representan distintos servicios en un entorno productivo.
+- **Daniel Eduardo Peñaranda Peralta**
+- **Jorge Adrián Alvarez**
+- **María Belén Cattaneo**  
+- **Nicolás Valentín Ciarrapico**  
+- **Sabrina Daiana Pryszczuk**
+
 
 Los servicios que contamos son:
 - [Apache Airflow](https://airflow.apache.org/)
@@ -288,11 +292,3 @@ Si tienes acceso a AWS S3, ten mucho cuidado de no reemplazar tus credenciales d
 ## Valkey
 
 La base de datos Valkey es usada por Apache Airflow para su funcionamiento. Tal como está configurado ahora no esta expuesto el puerto para poder ser usado externamente. Se puede modificar el archivo `docker-compose.yaml` para habilitaro.
-
-## Pull Request
-
-Este repositorio está abierto para que realicen sus propios Pull Requests y así contribuir a mejorarlo. Si desean realizar alguna modificación, **¡son bienvenidos!** También se pueden crear nuevos entornos productivos para aumentar la variedad de implementaciones, idealmente en diferentes `branches`. Algunas ideas que se me ocurren que podrían implementar son:
-
-- Reemplazar Airflow y MLflow con [Metaflow](https://metaflow.org/) o [Kubeflow](https://www.kubeflow.org).
-- Reemplazar MLflow con [Seldon-Core](https://github.com/SeldonIO/seldon-core).
-- Agregar un servicio de tableros como, por ejemplo, [Grafana](https://grafana.com).
