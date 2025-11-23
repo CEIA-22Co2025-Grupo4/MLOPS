@@ -529,3 +529,184 @@ def _log_correlation_heatmap(df, target_column):
 
     plt.tight_layout()
     _save_figure_and_log(fig, "charts/correlation_heatmap.png")
+
+
+def log_pipeline_summary(
+    raw_count,
+    enriched_count,
+    train_count,
+    test_count,
+    balanced_count,
+    final_train_count,
+    final_test_count,
+    feature_count,
+    run_name="pipeline_summary",
+):
+    """
+    Log overall pipeline summary showing data flow through all stages.
+
+    Args:
+        raw_count (int): Number of raw records
+        enriched_count (int): Number of enriched records (after cleaning)
+        train_count (int): Number of training records after split
+        test_count (int): Number of test records after split
+        balanced_count (int): Number of records after balancing
+        final_train_count (int): Number of final training records after feature selection
+        final_test_count (int): Number of final test records after feature selection
+        feature_count (int): Number of final features
+        run_name (str): MLflow run name
+
+    Returns:
+        dict: Summary metrics
+    """
+    try:
+        import mlflow
+    except ImportError:
+        logger.warning("MLflow not installed, skipping monitoring")
+        return {}
+
+    logger.info(f"Logging pipeline summary to MLflow: {run_name}")
+
+    with mlflow.start_run(run_name=run_name):
+        # Calculate retention rates
+        metrics = {
+            "raw_records": raw_count,
+            "enriched_records": enriched_count,
+            "train_records": train_count,
+            "test_records": test_count,
+            "balanced_records": balanced_count,
+            "final_train_records": final_train_count,
+            "final_test_records": final_test_count,
+            "final_features": feature_count,
+            "enrichment_retention_pct": (enriched_count / raw_count * 100)
+            if raw_count > 0
+            else 0,
+            "balancing_change_pct": (
+                (balanced_count - train_count) / train_count * 100
+            )
+            if train_count > 0
+            else 0,
+            "total_final_records": final_train_count + final_test_count,
+            "overall_retention_pct": (
+                (final_train_count + final_test_count) / raw_count * 100
+            )
+            if raw_count > 0
+            else 0,
+        }
+
+        _log_metrics(metrics)
+
+        # Create pipeline flow visualization
+        _log_pipeline_flow_chart(
+            raw_count,
+            enriched_count,
+            train_count,
+            test_count,
+            balanced_count,
+            final_train_count,
+            final_test_count,
+        )
+
+        logger.info("Pipeline summary logged successfully")
+        return metrics
+
+
+def _log_pipeline_flow_chart(
+    raw_count,
+    enriched_count,
+    train_count,
+    test_count,
+    balanced_count,
+    final_train_count,
+    final_test_count,
+):
+    """Generate and log pipeline data flow chart."""
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    # Define stages and counts
+    stages = [
+        "Raw\nData",
+        "Enriched\nData",
+        "Train\nSplit",
+        "Balanced\nTrain",
+        "Final\nTrain",
+        "Final\nTest",
+    ]
+    counts = [
+        raw_count,
+        enriched_count,
+        train_count,
+        balanced_count,
+        final_train_count,
+        final_test_count,
+    ]
+
+    # Create positions for bars
+    x_positions = [0, 1, 2.5, 3.5, 5, 5]
+    colors = ["#3498db", "#2ecc71", "#f39c12", "#e74c3c", "#9b59b6", "#1abc9c"]
+
+    # Plot bars
+    bars = ax.bar(x_positions, counts, color=colors, alpha=0.7, width=0.6)
+
+    # Add count labels on bars
+    for bar, count in zip(bars, counts):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height,
+            f"{count:,}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+        )
+
+    # Add stage labels
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(stages, fontsize=11)
+
+    # Add retention percentages between stages
+    retention_texts = [
+        f"{(enriched_count / raw_count * 100):.1f}%" if raw_count > 0 else "N/A",
+        f"{(train_count / enriched_count * 100):.1f}%"
+        if enriched_count > 0
+        else "N/A",
+        f"{(balanced_count / train_count * 100):.1f}%" if train_count > 0 else "N/A",
+        f"{(final_train_count / balanced_count * 100):.1f}%"
+        if balanced_count > 0
+        else "N/A",
+    ]
+
+    arrow_positions = [(0, 1), (1, 2.5), (2.5, 3.5), (3.5, 5)]
+
+    for (start, end), text in zip(arrow_positions, retention_texts):
+        mid_x = (start + end) / 2
+        mid_y = max(counts) * 0.5
+        ax.annotate(
+            text,
+            xy=(mid_x, mid_y),
+            fontsize=9,
+            ha="center",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+        )
+
+    # Add test split annotation
+    ax.annotate(
+        f"Test: {test_count:,}\n({(test_count / enriched_count * 100):.1f}%)",
+        xy=(2.5, train_count),
+        xytext=(1.5, max(counts) * 0.3),
+        fontsize=9,
+        ha="center",
+        bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.3),
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.3", lw=1.5),
+    )
+
+    ax.set_ylabel("Record Count", fontsize=12, fontweight="bold")
+    ax.set_title(
+        "ETL Pipeline Data Flow - Record Count by Stage", fontsize=14, fontweight="bold"
+    )
+    ax.grid(axis="y", alpha=0.3, linestyle="--")
+    ax.set_ylim(0, max(counts) * 1.15)
+
+    plt.tight_layout()
+    _save_figure_and_log(fig, "charts/pipeline_flow.png")
