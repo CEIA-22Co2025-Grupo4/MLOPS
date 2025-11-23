@@ -1,35 +1,40 @@
 import datetime
+import logging
 import os
 import tempfile
+
 import pandas as pd
 from airflow.decorators import dag, task
-from etl_helpers.minio_utils import (
-    upload_to_minio,
-    list_objects,
-    create_bucket_if_not_exists,
-    download_to_dataframe,
-    upload_from_dataframe,
-    check_file_exists,
-    set_bucket_lifecycle_policy,
-)
+
+from etl_helpers.data_balancing import balance_data as balance_data_fn
+from etl_helpers.data_encoding import encode_data as encode_data_fn
+from etl_helpers.data_enrichment import enrich_crime_data
 from etl_helpers.data_loader import (
     download_crimes_incremental,
     download_police_stations,
 )
-from etl_helpers.data_enrichment import enrich_crime_data
-from etl_helpers.data_splitter import preprocess_for_split, split_train_test
-from etl_helpers.outlier_processing import process_outliers as process_outliers_fn
-from etl_helpers.data_encoding import encode_data as encode_data_fn
 from etl_helpers.data_scaling import scale_data as scale_data_fn
-from etl_helpers.data_balancing import balance_data as balance_data_fn
+from etl_helpers.data_splitter import preprocess_for_split, split_train_test
 from etl_helpers.feature_selection import select_features as select_features_fn
+from etl_helpers.minio_utils import (
+    check_file_exists,
+    create_bucket_if_not_exists,
+    download_to_dataframe,
+    list_objects,
+    set_bucket_lifecycle_policy,
+    upload_from_dataframe,
+    upload_to_minio,
+)
 from etl_helpers.monitoring import (
-    log_raw_data_metrics,
-    log_split_metrics,
     log_balance_metrics,
     log_feature_selection_metrics,
     log_pipeline_summary,
+    log_raw_data_metrics,
+    log_split_metrics,
 )
+from etl_helpers.outlier_processing import process_outliers as process_outliers_fn
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")

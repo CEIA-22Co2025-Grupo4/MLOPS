@@ -581,9 +581,7 @@ def log_pipeline_summary(
             "enrichment_retention_pct": (enriched_count / raw_count * 100)
             if raw_count > 0
             else 0,
-            "balancing_change_pct": (
-                (balanced_count - train_count) / train_count * 100
-            )
+            "balancing_change_pct": ((balanced_count - train_count) / train_count * 100)
             if train_count > 0
             else 0,
             "total_final_records": final_train_count + final_test_count,
@@ -668,9 +666,7 @@ def _log_pipeline_flow_chart(
     # Add retention percentages between stages
     retention_texts = [
         f"{(enriched_count / raw_count * 100):.1f}%" if raw_count > 0 else "N/A",
-        f"{(train_count / enriched_count * 100):.1f}%"
-        if enriched_count > 0
-        else "N/A",
+        f"{(train_count / enriched_count * 100):.1f}%" if enriched_count > 0 else "N/A",
         f"{(balanced_count / train_count * 100):.1f}%" if train_count > 0 else "N/A",
         f"{(final_train_count / balanced_count * 100):.1f}%"
         if balanced_count > 0
