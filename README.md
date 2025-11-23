@@ -1,4 +1,4 @@
-# Ejemplo de ambiente productivo
+<!-- # Ejemplo de ambiente productivo
 ### MLOps1 - CEIA - FIUBA
 Estructura de servicios para la implementación del proyecto final de MLOps1 - CEIA - FIUBA
 
@@ -88,13 +88,29 @@ make install
 ```bash
 make clean
 make install && make up
-```
+``` -->
+# Predicción de Arrestos en Crímenes Reportados en la Ciudad de Chicago
 
-## ETL Pipeline: Chicago Crime Data
+## Descripción General
 
-El proyecto incluye un pipeline ETL completo para análisis de crímenes en Chicago:
+Este proyecto implementa un **pipeline de Machine Learning end-to-end** orientado a la predicción de la probabilidad de que **un delito registrado en la ciudad de Chicago** derive en un arresto.
+El modelo utiliza un conjunto de variables diseñadas para capturar información clave del evento delictivo, entre ellas:
 
-### Arquitectura del Pipeline
+* **Características del crimen**: código IUCR, categoría primaria, clasificación del FBI y tipo de delito.
+* **Información geoespacial**: coordenadas del incidente, distrito policial, área comunitaria y otros atributos territoriales.
+* **Contexto temporal**: fecha y hora del hecho, día de la semana, estación del año y otras transformaciones temporales relevantes.
+* **Proximidad operativa**: distancia al destacamento policial más cercano, incorporada como feature para capturar la influencia de la presencia policial.
+
+## Objetivo del modelo
+
+El objetivo del modelo es estimar la probabilidad de arresto asociado a un incidente delictivo en la ciudad de Chicago, utilizando un enfoque supervisado de clasificación.
+El sistema toma como entrada los registros históricos del Chicago Police Department y genera predicciones basadas en un conjunto de features que integran información criminal, espacial, temporal y operativa (presencia policial).
+Este modelo constituye el núcleo del pipeline, sobre el cual se montan las tareas de entrenamiento, validación, seguimiento y despliegue
+
+
+## Arquitectura del pipeline de Machine Learning Chicago Crime Data
+
+### Arquitectura del ETL Pipeline
 
 **Task 1: setup_s3**
 - Crea bucket MinIO si no existe
@@ -124,7 +140,7 @@ El proyecto incluye un pipeline ETL completo para análisis de crímenes en Chic
 - `balance_data` - Balanceo con SMOTE + RandomUnderSampler
 - `extract_features` - Selección de features con Mutual Information
 
-### Estructura de Módulos
+#### Estructura de Módulos
 
 ```
 airflow/dags/
@@ -136,7 +152,7 @@ airflow/dags/
     └── data_enrichment.py        # Enriquecimiento geoespacial y temporal
 ```
 
-### Configuración
+#### Configuración
 
 **Variables de entorno requeridas (`.env`):**
 ```bash
@@ -150,7 +166,7 @@ DATA_REPO_BUCKET_NAME=data        # Bucket MinIO para datos
 - `shapely` - Geometrías
 - `pandas` - Manipulación de datos
 
-### Ejecución
+#### Ejecución
 
 **Trigger manual:**
 1. Abrir Airflow UI: `make airflow`
@@ -162,7 +178,7 @@ DATA_REPO_BUCKET_NAME=data        # Bucket MinIO para datos
 - Primera ejecución: descarga año completo
 - Subsecuentes: solo último mes
 
-### Monitoreo
+#### Monitoreo
 
 **Ver logs:**
 ```bash
@@ -181,7 +197,7 @@ make airflow   # Ver DAG runs y logs
 make minio     # Ver archivos en buckets
 ```
 
-### Datos de Salida
+#### Datos de Salida
 
 **Ubicación:** MinIO bucket `data/`
 
@@ -202,8 +218,16 @@ data/
     ├── test_encoded.csv
     └── ...
 ```
+### Entrenamiento y experimentación (Trainer + MLflow)
 
-## Apagar los servicios
+El servicio trainer ejecuta el pipeline de entrenamiento dentro de Docker.
+MLflow se utiliza para:
+registrar experimentos,
+almacenar métricas (precisión, recall, F1),
+guardar artefactos del modelo,
+versionar parámetros y resultados.
+Se implementa búsqueda de hiperparámetros.
+<!-- ## Apagar los servicios
 
 Estos servicios ocupan cierta cantidad de memoria RAM y procesamiento, por lo que cuando no se están utilizando, se recomienda detenerlos. Para hacerlo, ejecuta:
 
@@ -295,4 +319,4 @@ Este repositorio está abierto para que realicen sus propios Pull Requests y as�
 
 - Reemplazar Airflow y MLflow con [Metaflow](https://metaflow.org/) o [Kubeflow](https://www.kubeflow.org).
 - Reemplazar MLflow con [Seldon-Core](https://github.com/SeldonIO/seldon-core).
-- Agregar un servicio de tableros como, por ejemplo, [Grafana](https://grafana.com).
+- Agregar un servicio de tableros como, por ejemplo, [Grafana](https://grafana.com). -->
