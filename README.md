@@ -133,7 +133,10 @@ Este proyecto implementa un pipeline MLOps completo con los siguientes servicios
 
 Este proyecto sigue un flujo MLOps end-to-end:
 
-```
+<details>
+  <summary><strong>🔻 Clic aquí para ver el Diagrama de Flujo Versión Texto (ASCII)</strong></summary>
+
+  ```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                     1. ETL PIPELINE (Airflow)                   │
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐    │
@@ -190,7 +193,66 @@ Este proyecto sigue un flujo MLOps end-to-end:
 │  └──────────────────────────────────────────────────┘          │
 └─────────────────────────────────────────────────────────────────┘
 ```
+</details>
 
+```mermaid 
+graph LR
+    %% --- ESTILOS ---
+    %% Estilo para las cajas de contenido (alineadas a la izquierda para listas)
+    classDef content fill:#0d1117,stroke:#30363d,stroke-width:1px,color:#c9d1d9,text-align:left,rx:5,ry:5;
+    %% Estilo para los títulos de las etapas
+    classDef title fill:#161b22,stroke:#1f6feb,stroke-width:2px,color:#58a6ff,font-weight:bold;
+
+    %% --- 1. ETL ---
+    subgraph S1 ["1. ETL PIPELINE (Airflow)"]
+        direction TB
+        %% Definimos el flujo interno
+        N1("📥 Download Data &rarr; Enrich Data<br>⚙️ Process Data&rarr; ML-Ready Data"):::title
+        D1("💾 MinIO s3://data/<br>------------------<br>• [Raw Data]<br>• [Enriched Data]<br>• [Processed]<br>• [Train/Test]"):::content
+        N1 --> D1
+    end
+
+    %% --- 2. EXPERIMENTACIÓN ---
+    subgraph S2 ["2. EXPERIMENTACIÓN"]
+        direction TB
+        N2("🧪 Notebooks/Scripts"):::title
+        D2("🤖 Modelos:<br>• Exp. 1: Logistic Regression<br>• Exp. 2: Random Forest<br>• Exp. 3: XGBoost<br><br>📊 MLflow Tracking UI:<br>• Metrics: Accuracy, Precision, Recall, F1, AUC<br>• Params: Hyperparameters, Features, Data version<br>• Artifacts: Model, Charts, Feature importance"):::content
+        N2 --> D2
+    end
+
+    %% --- 3. REGISTRO DE MODELO---
+    subgraph S3 ["3. REGISTRO (MLflow)"]
+        direction TB
+        N3("🥇 Model Registry"):::title
+        D3("📋 Flujo:<br>1. Seleccionar Mejor<br>2. Registrar Versión<br>3. Stage: 'Staging'<br>4. Stage: 'Production'"):::content
+        N3 --> D3
+    end
+
+    %% --- 4. DESPLIEGUE ---
+    subgraph S4 ["4. DESPLIEGUE (FastAPI)"]
+        direction TB
+        N4("🚀 API REST"):::title
+        D4("🔌 Endpoints:<br>------------------<br>• POST /predict<br>  (Predicción individual)<br>• POST /predict/batch<br>  (Predicción por lote)<br>• GET /model/info (Info del modelo en uso)"):::content
+        N4 --> D4
+    end
+
+    %% --- 5. MONITOREO ---
+    subgraph S5 ["5. MANTENIMIENTO"]
+        direction TB
+        N5("🛡️ Monitoreo"):::title
+        D5("⚠️ Data Drift check<br>📈 Performance tracking<br>🔄 Automated Retraining (AirFlow DAG)<br>🆚 A/B Testing (Champion/Challenger)"):::content
+        N5 --> D5
+    end
+
+    %% --- CONEXIONES ---
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    
+    %% --- RETROALIMENTACION ---
+    D5 -.-> |Trigger New Run| S1
+```
 ---
 
 ## 🔧 ETL Pipeline
@@ -200,8 +262,10 @@ Este proyecto sigue un flujo MLOps end-to-end:
 Pipeline ETL automatizado que procesa datos de crímenes de Chicago desde la API pública hasta datasets ML-ready.
 
 ### Arquitectura del Pipeline
+<details>
+  <summary><strong>🔻 Clic aquí para ver el Diagrama de Flujo Versión Texto (ASCII)</strong></summary>
 
-```
+  ```text
 ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
 │   Setup     │ → │  Download   │ → │   Enrich    │ → │    Split    │
 │     S3      │   │    Data     │   │    Data     │   │    Data     │
@@ -216,6 +280,37 @@ Pipeline ETL automatizado que procesa datos de crímenes de Chicago desde la API
 │   Pipeline  │
 │   Summary   │
 └─────────────┘
+```
+</details>
+
+```mermaid
+graph LR
+    %% Cambiamos a LR (Left to Right) para que sea horizontal
+    
+    %% Estilos "Dark Mode Friendly" (Fondo oscuro, letra blanca)
+    classDef steps fill:#1f425f,stroke:#82b1ff,stroke-width:2px,color:white,rx:5,ry:5;
+    classDef startend fill:#1b4d3e,stroke:#4cc9f0,stroke-width:2px,color:white,rx:5,ry:5;
+
+    %% Nodos
+    A[Setup<br>S3]:::startend
+    B[Download<br>Data]:::steps
+    C[Enrich<br>Data]:::steps
+    D[Split<br>Data]:::steps
+    E[Encode<br>Data]:::steps
+    F[Scale<br>Data]:::steps
+    G[Balance<br>Data]:::steps
+    H[Extract<br>Features]:::steps
+    I[Pipeline<br>Summary]:::startend
+
+    %% Conexiones
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
 ```
 
 ### Etapas del Pipeline
