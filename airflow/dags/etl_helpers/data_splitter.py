@@ -4,8 +4,14 @@ Data Splitting Functions
 Functions for preprocessing and splitting Chicago crime data into train/test sets.
 """
 
+import os
+import sys
 import logging
 from sklearn.model_selection import train_test_split
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +45,47 @@ def preprocess_for_split(df):
         else:
             logger.info("No duplicates found")
 
-        # Fill null values in location_description with 'UNKNOWN'
-        if "location_description" in df_clean.columns:
-            null_count = df_clean["location_description"].isna().sum()
-            if null_count > 0:
-                df_clean = df_clean.copy()
-                df_clean["location_description"] = df_clean[
-                    "location_description"
-                ].fillna("UNKNOWN")
-                logger.info(
-                    f"Filled {null_count} null values in 'location_description' with 'UNKNOWN'"
-                )
-            else:
-                logger.info("No null values found in 'location_description'")
+        # Log NaN summary across all columns
+        nan_summary = df_clean.isna().sum()
+        nan_cols = nan_summary[nan_summary > 0]
+        if len(nan_cols) > 0:
+            logger.warning(f"NaN values found in {len(nan_cols)} columns:")
+            for col, count in nan_cols.items():
+                logger.warning(f"  {col}: {count} NaN ({100 * count / len(df_clean):.2f}%)")
+
+        # Fill null values in categorical columns
+        categorical_fill_values = {
+            "location_description": "UNKNOWN",
+            "primary_type": "UNKNOWN",
+            "fbi_code": "UNKNOWN",
+            "nearest_police_station_district_name": "UNKNOWN",
+        }
+
+        df_clean = df_clean.copy()
+        for col, fill_value in categorical_fill_values.items():
+            if col in df_clean.columns:
+                null_count = df_clean[col].isna().sum()
+                if null_count > 0:
+                    df_clean[col] = df_clean[col].fillna(fill_value)
+                    logger.info(f"Filled {null_count} NaN in '{col}' with '{fill_value}'")
+
+        # Fill null values in numeric columns with median
+        numeric_fill_columns = ["beat", "ward", "community_area", "district"]
+        for col in numeric_fill_columns:
+            if col in df_clean.columns:
+                null_count = df_clean[col].isna().sum()
+                if null_count > 0:
+                    median_val = df_clean[col].median()
+                    df_clean[col] = df_clean[col].fillna(median_val)
+                    logger.info(f"Filled {null_count} NaN in '{col}' with median: {median_val}")
+
+        # Final NaN check - drop any remaining rows with NaN in critical columns
+        remaining_nan = df_clean.isna().sum().sum()
+        if remaining_nan > 0:
+            logger.warning(f"Remaining NaN values: {remaining_nan}. Dropping affected rows...")
+            rows_before = len(df_clean)
+            df_clean = df_clean.dropna()
+            logger.info(f"Dropped {rows_before - len(df_clean)} rows with remaining NaN")
 
         # Drop non-feature columns (temporal features already extracted)
         columns_to_drop = ["date", "index_right", "description"]

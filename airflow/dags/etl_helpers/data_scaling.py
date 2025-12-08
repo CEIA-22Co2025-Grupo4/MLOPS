@@ -4,9 +4,15 @@ Data Scaling Functions
 Functions for scaling numerical features using StandardScaler.
 """
 
+import os
+import sys
 import pandas as pd
 import logging
 from sklearn.preprocessing import StandardScaler
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +31,7 @@ def scale_data(train_df, test_df, columns=None):
         tuple: (train_scaled, test_scaled) DataFrames
     """
     if columns is None:
-        columns = [
-            "x_coordinate",
-            "y_coordinate",
-            "latitude",
-            "longitude",
-            "distance_crime_to_police_station",
-        ]
+        columns = list(config.SCALING_COLUMNS)
 
     logger.info(f"Scaling {len(columns)} numerical features...")
 
@@ -52,6 +52,24 @@ def scale_data(train_df, test_df, columns=None):
     # Extract columns to scale
     train_subset = train_df[existing_columns]
     test_subset = test_df[existing_columns]
+
+    # Validate: check for NaN values before scaling
+    train_nan = train_subset.isna().sum()
+    test_nan = test_subset.isna().sum()
+
+    if train_nan.any():
+        nan_cols = train_nan[train_nan > 0].to_dict()
+        logger.error(f"NaN values found in train data before scaling: {nan_cols}")
+        raise ValueError(
+            f"Cannot scale data with NaN values. Columns with NaN: {list(nan_cols.keys())}"
+        )
+
+    if test_nan.any():
+        nan_cols = test_nan[test_nan > 0].to_dict()
+        logger.error(f"NaN values found in test data before scaling: {nan_cols}")
+        raise ValueError(
+            f"Cannot scale data with NaN values. Columns with NaN: {list(nan_cols.keys())}"
+        )
 
     # Fit scaler on train data
     scaler = StandardScaler()

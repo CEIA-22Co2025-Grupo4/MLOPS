@@ -4,10 +4,16 @@ Data Encoding Functions
 Functions for encoding categorical and numerical variables.
 """
 
+import os
+import sys
 import numpy as np
 import pandas as pd
 import logging
 from sklearn.preprocessing import OneHotEncoder
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,18 @@ def apply_log_transformation(
     test_transformed = test_df.copy()
 
     if column in train_transformed.columns:
+        # Check for NaN values
+        train_nan = train_transformed[column].isna().sum()
+        test_nan = test_transformed[column].isna().sum()
+        if train_nan > 0 or test_nan > 0:
+            logger.warning(f"NaN values found before log transform: train={train_nan}, test={test_nan}")
+
+        # Check for negative values (log1p of negative returns NaN)
+        train_neg = (train_transformed[column] < 0).sum()
+        test_neg = (test_transformed[column] < 0).sum()
+        if train_neg > 0 or test_neg > 0:
+            logger.warning(f"Negative values found (will become NaN): train={train_neg}, test={test_neg}")
+
         train_transformed[column] = np.log1p(train_transformed[column])
         test_transformed[column] = np.log1p(test_transformed[column])
         logger.info(f"Log transformation applied to '{column}'")
@@ -59,6 +77,17 @@ def apply_cyclic_encoding(train_df, test_df, column="day_of_week"):
     test_encoded = test_df.copy()
 
     if column in train_encoded.columns:
+        # Check for NaN values
+        train_nan = train_encoded[column].isna().sum()
+        test_nan = test_encoded[column].isna().sum()
+        if train_nan > 0 or test_nan > 0:
+            logger.warning(f"NaN values found in '{column}': train={train_nan}, test={test_nan}")
+            # Fill NaN with mode (most common day)
+            mode_val = train_encoded[column].mode()[0] if len(train_encoded[column].mode()) > 0 else 0
+            train_encoded[column] = train_encoded[column].fillna(mode_val)
+            test_encoded[column] = test_encoded[column].fillna(mode_val)
+            logger.info(f"Filled NaN in '{column}' with mode: {mode_val}")
+
         # Convert to 1-7 range and apply sine transformation
         train_encoded[f"{column}_sin"] = np.sin(
             2 * np.pi * (train_encoded[column] + 1) / 7
@@ -98,6 +127,17 @@ def apply_onehot_encoding(train_df, test_df, columns=None):
         if col not in train_encoded.columns:
             logger.warning(f"Column '{col}' not found, skipping...")
             continue
+
+        # Check for NaN values (OneHotEncoder doesn't handle NaN)
+        train_nan = train_encoded[col].isna().sum()
+        test_nan = test_encoded[col].isna().sum()
+        if train_nan > 0 or test_nan > 0:
+            logger.warning(f"NaN values found in '{col}': train={train_nan}, test={test_nan}")
+            # Fill with most frequent value
+            mode_val = train_encoded[col].mode()[0] if len(train_encoded[col].mode()) > 0 else "UNKNOWN"
+            train_encoded[col] = train_encoded[col].fillna(mode_val)
+            test_encoded[col] = test_encoded[col].fillna(mode_val)
+            logger.info(f"Filled NaN in '{col}' with mode: {mode_val}")
 
         # Initialize encoder
         ohe = OneHotEncoder(sparse_output=False, drop="first", handle_unknown="ignore")
@@ -151,6 +191,16 @@ def apply_label_encoding(train_df, test_df, columns=None):
             logger.warning(f"Column '{col}' not found, skipping...")
             continue
 
+        # Check for NaN values (.astype(int) fails on NaN)
+        train_nan = train_encoded[col].isna().sum()
+        test_nan = test_encoded[col].isna().sum()
+        if train_nan > 0 or test_nan > 0:
+            logger.warning(f"NaN values found in '{col}': train={train_nan}, test={test_nan}")
+            # Fill with False (0) for boolean columns
+            train_encoded[col] = train_encoded[col].fillna(False)
+            test_encoded[col] = test_encoded[col].fillna(False)
+            logger.info(f"Filled NaN in '{col}' with False")
+
         # Create new column with _tag suffix
         new_col = f"{col}_tag"
         train_encoded[new_col] = train_encoded[col].astype(int)
@@ -203,7 +253,8 @@ def apply_frequency_encoding(train_df, test_df, columns=None):
 
         # Create new column with _freq suffix
         new_col = f"{col}_freq"
-        train_encoded[new_col] = train_encoded[col].map(freq_encoding).astype(float)
+        # Use fillna(0) for both train and test to handle any NaN values consistently
+        train_encoded[new_col] = train_encoded[col].map(freq_encoding).fillna(0).astype(float)
 
         # For test: use 0 for unseen categories
         test_encoded[new_col] = (

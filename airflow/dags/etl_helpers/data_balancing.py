@@ -4,11 +4,17 @@ Data Balancing Functions
 Functions for balancing the training dataset using SMOTE and undersampling.
 """
 
+import os
+import sys
 import pandas as pd
 import logging
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.pipeline import Pipeline
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +57,19 @@ def balance_data(train_df, target_column="arrest"):
             f"All features must be numeric for SMOTE."
         )
 
+    # Validate: check for NaN values before SMOTE
+    # NaN values should have been handled upstream (enrichment, encoding steps)
+    # If we find NaN here, it indicates a bug in the pipeline
+    nan_counts = X.isna().sum()
+    if nan_counts.any():
+        nan_cols = nan_counts[nan_counts > 0].to_dict()
+        logger.error(f"NaN values found in columns (this should not happen): {nan_cols}")
+        logger.error("NaN values should be handled in upstream steps (enrichment, encoding)")
+        raise ValueError(
+            f"Unexpected NaN values in {len(nan_cols)} columns: {list(nan_cols.keys())}. "
+            f"Check data_enrichment.py and data_encoding.py for missing NaN handling."
+        )
+
     # Log original class distribution
     original_counts = y.value_counts()
     original_ratio = original_counts.min() / original_counts.max()
@@ -61,12 +80,18 @@ def balance_data(train_df, target_column="arrest"):
     logger.info(f"  Class 1: {class_1_count} ({100 * class_1_count / len(y):.1f}%)")
     logger.info(f"  Original ratio (min/max): {original_ratio:.3f}")
 
-    # Create balancing pipeline
-    # Step 1: SMOTE - oversample minority to 50% of majority
-    over = SMOTE(sampling_strategy=0.5, random_state=17)
+    # Create balancing pipeline (using config values)
+    # Step 1: SMOTE - oversample minority to configured ratio of majority
+    over = SMOTE(
+        sampling_strategy=config.SMOTE_SAMPLING_STRATEGY,
+        random_state=config.BALANCING_RANDOM_STATE,
+    )
 
-    # Step 2: RandomUnderSampler - reduce majority so minority = 80% of majority
-    under = RandomUnderSampler(sampling_strategy=0.8, random_state=17)
+    # Step 2: RandomUnderSampler - reduce majority to configured ratio
+    under = RandomUnderSampler(
+        sampling_strategy=config.UNDERSAMPLE_STRATEGY,
+        random_state=config.BALANCING_RANDOM_STATE,
+    )
 
     # Combine both steps
     steps = [("oversample", over), ("undersample", under)]

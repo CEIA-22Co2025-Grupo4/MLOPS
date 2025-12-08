@@ -9,13 +9,18 @@ import pandas as pd
 from sodapy import Socrata
 from datetime import datetime, timedelta
 import logging
+import sys
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
 
 logger = logging.getLogger(__name__)
 
-# Dataset IDs
-CRIME_DATASET_ID = "ijzp-q8t2"
-POLICE_STATIONS_DATASET_ID = "z8bn-74gv"
-SOCRATA_DOMAIN = "data.cityofchicago.org"
+# Dataset IDs (from config)
+CRIME_DATASET_ID = config.CRIME_DATASET_ID
+POLICE_STATIONS_DATASET_ID = config.POLICE_STATIONS_DATASET_ID
+SOCRATA_DOMAIN = config.SOCRATA_DOMAIN
 
 
 def get_socrata_client():
@@ -31,7 +36,7 @@ def get_socrata_client():
             "SOCRATA_APP_TOKEN not found in environment. API rate limits will apply."
         )
 
-    client = Socrata(SOCRATA_DOMAIN, app_token, timeout=60)
+    client = Socrata(SOCRATA_DOMAIN, app_token, timeout=config.API_TIMEOUT)
     return client
 
 

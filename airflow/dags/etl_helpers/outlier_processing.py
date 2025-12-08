@@ -4,12 +4,18 @@ Outlier Processing Functions
 Functions for detecting and removing outliers from crime data.
 """
 
+import os
+import sys
 import numpy as np
 import logging
 
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
+
 logger = logging.getLogger(__name__)
 
-# Column to process for outliers
+# Column to process for outliers (from config)
 DISTANCE_COLUMN = "distance_crime_to_police_station"
 
 
@@ -85,8 +91,9 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     Uses statistics from train data only to avoid data leakage.
 
     Steps:
-    1. Calculate statistics from TRAIN data
-    2. Remove outliers from BOTH datasets using train statistics
+    1. Check for and handle NaN values
+    2. Calculate statistics from TRAIN data
+    3. Remove outliers from BOTH datasets using train statistics
 
     Args:
         train_df (pd.DataFrame): Training dataframe
@@ -103,7 +110,17 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
         logger.warning(f"Column '{column}' not found in DataFrame")
         return train_df, test_df
 
+    # Check for NaN values in the target column
+    train_nan_count = train_df[column].isna().sum()
+    test_nan_count = test_df[column].isna().sum()
+
+    if train_nan_count > 0:
+        logger.warning(f"Found {train_nan_count} NaN values in train '{column}'. These rows will be excluded.")
+    if test_nan_count > 0:
+        logger.warning(f"Found {test_nan_count} NaN values in test '{column}'. These rows will be excluded.")
+
     # Calculate statistics from TRAIN data only (avoid data leakage)
+    # Note: pandas mean/std skip NaN by default
     mean_val = train_df[column].mean()
     std_val = train_df[column].std()
 
