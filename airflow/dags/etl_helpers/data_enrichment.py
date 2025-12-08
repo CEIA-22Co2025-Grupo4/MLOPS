@@ -5,29 +5,35 @@ Functions for enriching Chicago crime data with geospatial and temporal features
 """
 
 import os
-import sys
+import logging
+from typing import Optional
+
 import pandas as pd
 import geopandas as gpd
-import logging
 
-# Add parent directory to path for config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from etl_config import config
+from . import config
+from .exceptions import EnrichmentError
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_nearest_station(crimes_df, stations_df):
+def calculate_nearest_station(
+    crimes_df: pd.DataFrame,
+    stations_df: pd.DataFrame,
+) -> pd.DataFrame:
     """
     Calculate distance from each crime to the nearest police station.
     Uses X/Y coordinates if available (already projected), otherwise lat/lon.
 
     Args:
-        crimes_df (pd.DataFrame): Crime data with x/y coordinates or latitude/longitude
-        stations_df (pd.DataFrame): Police stations with x/y coordinates or latitude/longitude
+        crimes_df: Crime data with x/y coordinates or latitude/longitude
+        stations_df: Police stations with x/y coordinates or latitude/longitude
 
     Returns:
-        pd.DataFrame: Crime data with nearest station distance (in meters) and district
+        Crime data with nearest station distance (in meters) and district
+
+    Raises:
+        EnrichmentError: If spatial join fails
     """
     logger.info("Calculating distances to nearest police stations...")
 
@@ -115,19 +121,22 @@ def calculate_nearest_station(crimes_df, stations_df):
 
     except Exception as e:
         logger.error(f"Error calculating nearest stations: {e}")
-        raise
+        raise EnrichmentError(f"Error calculating nearest stations: {e}") from e
 
 
-def create_temporal_features(df):
+def create_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Create temporal features from the date column.
     Creates: Season, Day of Week, Day Time (morning/afternoon/evening/night).
 
     Args:
-        df (pd.DataFrame): DataFrame with 'date' column
+        df: DataFrame with 'date' column
 
     Returns:
-        pd.DataFrame: DataFrame with added temporal features
+        DataFrame with added temporal features
+
+    Raises:
+        EnrichmentError: If temporal feature creation fails
     """
     logger.info("Creating temporal features...")
 
@@ -141,7 +150,7 @@ def create_temporal_features(df):
         df["day_of_week"] = df["date"].dt.dayofweek  # 0=Monday, 6=Sunday
 
         # Create Season feature
-        def get_season(month):
+        def get_season(month: int) -> str:
             if month in [12, 1, 2]:
                 return "Winter"
             elif month in [3, 4, 5]:
@@ -154,7 +163,7 @@ def create_temporal_features(df):
         df["season"] = df["month"].apply(get_season)
 
         # Create Day Time feature (4 periods)
-        def get_day_time(hour):
+        def get_day_time(hour: int) -> str:
             if 6 <= hour < 12:
                 return "Morning"
             elif 12 <= hour < 18:
@@ -174,19 +183,22 @@ def create_temporal_features(df):
 
     except Exception as e:
         logger.error(f"Error creating temporal features: {e}")
-        raise
+        raise EnrichmentError(f"Error creating temporal features: {e}") from e
 
 
-def clean_and_select_columns(df):
+def clean_and_select_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean data and select relevant columns.
     Removes ID columns and unnecessary fields as per notebook.
 
     Args:
-        df (pd.DataFrame): Raw merged dataframe
+        df: Raw merged dataframe
 
     Returns:
-        pd.DataFrame: Cleaned dataframe with selected columns
+        Cleaned dataframe with selected columns
+
+    Raises:
+        EnrichmentError: If cleaning fails
     """
     logger.info("Cleaning and selecting columns...")
 
@@ -235,7 +247,8 @@ def clean_and_select_columns(df):
                 df_cleaned = df_cleaned.dropna(subset=existing_critical)
                 rows_dropped = rows_before - len(df_cleaned)
                 logger.info(
-                    f"Dropped {rows_dropped} rows with invalid coordinates. Remaining: {len(df_cleaned)}"
+                    f"Dropped {rows_dropped} rows with invalid coordinates. "
+                    f"Remaining: {len(df_cleaned)}"
                 )
 
         # Handle NaN in distance column (fill with median if present)
@@ -247,7 +260,8 @@ def clean_and_select_columns(df):
                     "distance_crime_to_police_station"
                 ].fillna(median_dist)
                 logger.info(
-                    f"Filled {dist_nan_count} NaN values in distance column with median: {median_dist:.2f}"
+                    f"Filled {dist_nan_count} NaN values in distance column "
+                    f"with median: {median_dist:.2f}"
                 )
 
         logger.info(
@@ -257,20 +271,27 @@ def clean_and_select_columns(df):
 
     except Exception as e:
         logger.error(f"Error cleaning data: {e}")
-        raise
+        raise EnrichmentError(f"Error cleaning data: {e}") from e
 
 
-def enrich_crime_data(crimes_df, stations_df, output_file=None):
+def enrich_crime_data(
+    crimes_df: pd.DataFrame,
+    stations_df: pd.DataFrame,
+    output_file: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Enrich crime data by adding nearest station info and temporal features.
 
     Args:
-        crimes_df (pd.DataFrame): Downloaded crime data
-        stations_df (pd.DataFrame): Police stations data
-        output_file (str, optional): Path to save enriched CSV
+        crimes_df: Downloaded crime data
+        stations_df: Police stations data
+        output_file: Path to save enriched CSV (optional)
 
     Returns:
-        pd.DataFrame: Enriched crime data
+        Enriched crime data
+
+    Raises:
+        EnrichmentError: If enrichment process fails
     """
     logger.info("Starting data enrichment...")
 
@@ -297,6 +318,8 @@ def enrich_crime_data(crimes_df, stations_df, output_file=None):
         logger.info(f"Enrichment completed: {len(final_df)} records")
         return final_df
 
+    except EnrichmentError:
+        raise
     except Exception as e:
         logger.error(f"Error in data enrichment: {e}")
-        raise
+        raise EnrichmentError(f"Error in data enrichment: {e}") from e
