@@ -57,6 +57,41 @@ Si estás usando un servidor externo a tu computadora de trabajo, reemplaza `loc
 
 Todos los puertos u otras configuraciones se pueden modificar en el archivo `.env`. Se invita a jugar y romper para aprender; siempre puedes volver a clonar este repositorio.
 
+## Variables de entorno requeridas
+
+Antes de ejecutar `make install`, asegúrate de configurar las siguientes variables en el archivo `.env`:
+
+```bash
+# Requeridas para el pipeline ETL
+SOCRATA_APP_TOKEN=tu_token_aqui    # Token de Socrata API (ver instrucciones abajo)
+DATA_REPO_BUCKET_NAME=data          # Bucket MinIO para datos
+
+# Ya configuradas por defecto (modificar solo si es necesario)
+AIRFLOW_UID=1000                    # UID del usuario para Airflow
+AWS_ACCESS_KEY_ID=minio             # Credenciales MinIO
+AWS_SECRET_ACCESS_KEY=minio123      # Credenciales MinIO
+```
+
+### Obtener Token de Socrata (Chicago Data Portal)
+
+El pipeline ETL descarga datos del Chicago Data Portal usando la API de Socrata. Para evitar límites de tasa, necesitas un App Token:
+
+1. Ir a https://data.cityofchicago.org/
+2. Crear una cuenta o iniciar sesión (click en "Sign In" arriba a la derecha)
+3. Una vez logueado, ir a tu perfil (click en tu nombre) → "Developer Settings"
+4. Click en "Create New App Token"
+5. Completar el formulario:
+   - **Application Name**: Nombre descriptivo (ej: "MLOps CEIA")
+   - **Description**: Descripción breve
+   - **Website** (opcional): Puede dejarse vacío
+6. Click en "Save" y copiar el **App Token** generado
+7. Agregar el token al archivo `.env`:
+   ```bash
+   SOCRATA_APP_TOKEN=tu_token_generado_aqui
+   ```
+
+> **Nota**: Sin el token, el pipeline funcionará pero con límites de velocidad más restrictivos.
+
 ## Comandos disponibles (Makefile)
 
 El proyecto incluye un Makefile con comandos útiles para gestionar los servicios:
@@ -138,11 +173,7 @@ airflow/dags/
 
 ### Configuración
 
-**Variables de entorno requeridas (`.env`):**
-```bash
-SOCRATA_APP_TOKEN=tu_token_aqui  # Token de Socrata API
-DATA_REPO_BUCKET_NAME=data        # Bucket MinIO para datos
-```
+Las variables de entorno requeridas (`SOCRATA_APP_TOKEN`, `DATA_REPO_BUCKET_NAME`) están documentadas en la sección [Variables de entorno requeridas](#variables-de-entorno-requeridas) al inicio de este documento.
 
 **Dependencias principales:**
 - `sodapy` - Cliente Socrata API
