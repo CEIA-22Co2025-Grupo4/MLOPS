@@ -191,30 +191,8 @@ def clean_and_select_columns(df):
     logger.info("Cleaning and selecting columns...")
 
     try:
-        # Define columns to keep (based on notebook 1)
-        columns_to_keep = [
-            "date",
-            "primary_type",
-            "description",
-            "location_description",
-            "arrest",
-            "domestic",
-            "beat",
-            "district",
-            "ward",
-            "community_area",
-            "fbi_code",
-            "x_coordinate",
-            "y_coordinate",
-            "latitude",
-            "longitude",
-            "distance_crime_to_police_station",
-            "nearest_police_station_district",
-            "nearest_police_station_district_name",
-            "season",
-            "day_of_week",
-            "day_time",
-        ]
+        # Define columns to keep (from config)
+        columns_to_keep = list(config.COLUMNS_TO_KEEP)
 
         # Keep only columns that exist in the dataframe
         existing_columns = [col for col in columns_to_keep if col in df.columns]

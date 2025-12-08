@@ -115,7 +115,7 @@ def apply_onehot_encoding(train_df, test_df, columns=None):
         tuple: (train_encoded, test_encoded, encoders) - DataFrames and fitted encoders
     """
     if columns is None:
-        columns = ["season", "day_time"]
+        columns = list(config.ONEHOT_ENCODING_COLUMNS)
 
     logger.info(f"Applying one-hot encoding to: {columns}")
 
@@ -225,16 +225,8 @@ def apply_frequency_encoding(train_df, test_df, columns=None):
         tuple: (train_encoded, test_encoded, freq_maps) - DataFrames and frequency mappings
     """
     if columns is None:
-        # Only include columns that actually exist after enrichment
-        columns = [
-            "primary_type",
-            "location_description",
-            "fbi_code",
-            "nearest_police_station_district_name",
-            "beat",
-            "ward",
-            "community_area",
-        ]
+        # Use columns from config
+        columns = list(config.FREQUENCY_ENCODING_COLUMNS)
 
     logger.info(f"Applying frequency encoding to {len(columns)} columns...")
 

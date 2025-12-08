@@ -88,7 +88,7 @@ def preprocess_for_split(df):
             logger.info(f"Dropped {rows_before - len(df_clean)} rows with remaining NaN")
 
         # Drop non-feature columns (temporal features already extracted)
-        columns_to_drop = ["date", "index_right", "description"]
+        columns_to_drop = list(config.COLUMNS_TO_DROP_PREPROCESS)
         existing_drops = [col for col in columns_to_drop if col in df_clean.columns]
         if existing_drops:
             df_clean = df_clean.drop(columns=existing_drops)
@@ -102,19 +102,27 @@ def preprocess_for_split(df):
         raise
 
 
-def split_train_test(df, test_size=0.2, random_state=42, stratify_column="arrest"):
+def split_train_test(df, test_size=None, random_state=None, stratify_column=None):
     """
     Split dataframe into stratified train and test sets.
 
     Args:
         df (pd.DataFrame): Preprocessed dataframe
-        test_size (float): Proportion of data for test set (default: 0.2)
-        random_state (int): Random seed for reproducibility (default: 42)
-        stratify_column (str): Column name to use for stratification (default: 'arrest')
+        test_size (float): Proportion of data for test set (default from config)
+        random_state (int): Random seed for reproducibility (default from config)
+        stratify_column (str): Column name to use for stratification (default from config)
 
     Returns:
         tuple: (train_df, test_df) DataFrames
     """
+    # Use config defaults if not provided
+    if test_size is None:
+        test_size = config.SPLIT_TEST_SIZE
+    if random_state is None:
+        random_state = config.SPLIT_RANDOM_STATE
+    if stratify_column is None:
+        stratify_column = config.TARGET_COLUMN
+
     logger.info(
         f"Splitting data: {100 * (1 - test_size):.0f}% train, {100 * test_size:.0f}% test"
     )

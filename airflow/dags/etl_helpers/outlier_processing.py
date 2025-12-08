@@ -85,7 +85,7 @@ def remove_outliers_std_method(df, column=DISTANCE_COLUMN, n_std=3):
     return df_no_outliers
 
 
-def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
+def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=None):
     """
     Remove outliers from both train and test datasets.
     Uses statistics from train data only to avoid data leakage.
@@ -104,6 +104,10 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=3):
     Returns:
         tuple: (train_processed, test_processed) DataFrames
     """
+    # Use config default if not provided
+    if n_std is None:
+        n_std = config.OUTLIER_STD_THRESHOLD
+
     logger.info("Starting outlier removal...")
 
     if column not in train_df.columns:

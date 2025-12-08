@@ -4,6 +4,7 @@ Monitoring and MLflow Logging Functions
 Functions for monitoring ETL pipeline stages and logging metrics/artifacts to MLflow.
 """
 
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,6 +12,10 @@ import seaborn as sns
 import logging
 import tempfile
 import os
+
+# Add parent directory to path for config import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from etl_config import config
 
 logger = logging.getLogger(__name__)
 
@@ -270,19 +275,21 @@ def _log_raw_data_charts(df):
     _save_figure_and_log(fig, "charts/raw_data_overview.png")
 
 
-def log_split_metrics(train_df, test_df, target_column="arrest", run_name="split"):
+def log_split_metrics(train_df, test_df, target_column=None, run_name="split"):
     """
     Log train/test split metrics to MLflow.
 
     Args:
         train_df (pd.DataFrame): Training data
         test_df (pd.DataFrame): Test data
-        target_column (str): Target column name
+        target_column (str): Target column name (default from config)
         run_name (str): MLflow run name
 
     Returns:
         dict: Summary metrics
     """
+    if target_column is None:
+        target_column = config.TARGET_COLUMN
     try:
         import mlflow
     except ImportError:
@@ -342,7 +349,7 @@ def _log_split_chart(train_dist, test_dist, target_column):
 
 
 def log_balance_metrics(
-    original_df, balanced_df, target_column="arrest", run_name="balance"
+    original_df, balanced_df, target_column=None, run_name="balance"
 ):
     """
     Log data balancing metrics to MLflow.
@@ -350,12 +357,15 @@ def log_balance_metrics(
     Args:
         original_df (pd.DataFrame): Original training data
         balanced_df (pd.DataFrame): Balanced training data
-        target_column (str): Target column name
+        target_column (str): Target column name (default from config)
         run_name (str): MLflow run name
 
     Returns:
         dict: Summary metrics
     """
+    if target_column is None:
+        target_column = config.TARGET_COLUMN
+
     try:
         import mlflow
     except ImportError:
@@ -426,7 +436,7 @@ def log_feature_selection_metrics(
     original_df,
     selected_df,
     mi_scores_df=None,
-    target_column="arrest",
+    target_column=None,
     run_name="features",
 ):
     """
@@ -436,12 +446,15 @@ def log_feature_selection_metrics(
         original_df (pd.DataFrame): Original dataframe before selection
         selected_df (pd.DataFrame): Dataframe after feature selection
         mi_scores_df (pd.DataFrame): Mutual information scores (optional)
-        target_column (str): Target column name
+        target_column (str): Target column name (default from config)
         run_name (str): MLflow run name
 
     Returns:
         dict: Summary metrics
     """
+    if target_column is None:
+        target_column = config.TARGET_COLUMN
+
     try:
         import mlflow
     except ImportError:

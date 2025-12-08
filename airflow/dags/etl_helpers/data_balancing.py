@@ -19,7 +19,7 @@ from etl_config import config
 logger = logging.getLogger(__name__)
 
 
-def balance_data(train_df, target_column="arrest"):
+def balance_data(train_df, target_column=None):
     """
     Balance training data using combined SMOTE + RandomUnderSampler strategy.
 
@@ -36,6 +36,10 @@ def balance_data(train_df, target_column="arrest"):
     Returns:
         pd.DataFrame: Balanced training dataframe
     """
+    # Use config default if not provided
+    if target_column is None:
+        target_column = config.TARGET_COLUMN
+
     logger.info("Starting data balancing...")
 
     # Separate features and target

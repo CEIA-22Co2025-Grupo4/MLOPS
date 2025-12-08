@@ -54,8 +54,8 @@ def download_crimes_full(output_file=None):
     client = get_socrata_client()
 
     try:
-        # Calculate date range for past year
-        one_year_ago = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        # Calculate date range for past year (using config for rolling window)
+        one_year_ago = (datetime.now() - timedelta(days=config.ROLLING_WINDOW_DAYS)).strftime("%Y-%m-%d")
         today = datetime.now().strftime("%Y-%m-%d")
 
         logger.info(f"Downloading full crime dataset from {one_year_ago} to {today}...")
