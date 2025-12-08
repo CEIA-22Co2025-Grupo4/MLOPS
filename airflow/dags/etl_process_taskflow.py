@@ -29,29 +29,30 @@ from etl_helpers.monitoring import (
     log_balance_metrics,
     log_feature_selection_metrics,
 )
+from etl_config import config
 
-# Configuration
+# Configuration from centralized config
 BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
 
-# Bucket structure
-PREFIX_RAW = "0-raw-data/"
-PREFIX_MERGED = "1-merged-data/"
-PREFIX_ENRICHED = "2-enriched-data/"
-PREFIX_SPLIT = "3-split-data/"
-PREFIX_OUTLIERS = "4-outliers/"
-PREFIX_ENCODED = "5-encoded/"
-PREFIX_SCALED = "6-scaled/"
-PREFIX_BALANCED = "7-balanced/"
-PREFIX_ML_READY = "ml-ready-data/"  # Final ML-ready datasets
+# Bucket structure (from config)
+PREFIX_RAW = config.PREFIX_RAW
+PREFIX_MERGED = config.PREFIX_MERGED
+PREFIX_ENRICHED = config.PREFIX_ENRICHED
+PREFIX_SPLIT = config.PREFIX_SPLIT
+PREFIX_OUTLIERS = config.PREFIX_OUTLIERS
+PREFIX_ENCODED = config.PREFIX_ENCODED
+PREFIX_SCALED = config.PREFIX_SCALED
+PREFIX_BALANCED = config.PREFIX_BALANCED
+PREFIX_ML_READY = config.PREFIX_ML_READY
 
-# Data processing parameters
-LIFECYCLE_TTL_DAYS = 60  # All files deleted after 60 days
-ROLLING_WINDOW_DAYS = 365  # Merged data contains 365 days of crimes
-TARGET_COLUMN = "arrest"  # ML target variable
-SPLIT_TEST_SIZE = 0.2
-SPLIT_RANDOM_STATE = 42
-OUTLIER_STD_THRESHOLD = 3  # Number of standard deviations for outlier detection
-MI_THRESHOLD = 0.05  # Mutual Information threshold for feature selection
+# Data processing parameters (from config)
+LIFECYCLE_TTL_DAYS = config.LIFECYCLE_TTL_DAYS
+ROLLING_WINDOW_DAYS = config.ROLLING_WINDOW_DAYS
+TARGET_COLUMN = config.TARGET_COLUMN
+SPLIT_TEST_SIZE = config.SPLIT_TEST_SIZE
+SPLIT_RANDOM_STATE = config.SPLIT_RANDOM_STATE
+OUTLIER_STD_THRESHOLD = config.OUTLIER_STD_THRESHOLD
+MI_THRESHOLD = config.MI_THRESHOLD
 
 default_args = {
     "depends_on_past": False,
