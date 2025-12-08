@@ -4,22 +4,24 @@ Data Balancing Functions
 Functions for balancing the training dataset using SMOTE and undersampling.
 """
 
-import os
-import sys
-import pandas as pd
 import logging
+from typing import Optional
+
+import pandas as pd
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.pipeline import Pipeline
 
-# Add parent directory to path for config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from etl_config import config
+from . import config
+from .exceptions import DataValidationError
 
 logger = logging.getLogger(__name__)
 
 
-def balance_data(train_df, target_column=None):
+def balance_data(
+    train_df: pd.DataFrame,
+    target_column: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Balance training data using combined SMOTE + RandomUnderSampler strategy.
 
@@ -30,11 +32,14 @@ def balance_data(train_df, target_column=None):
        - Final ratio: minority = 80% of majority
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        target_column (str): Target column name (default: 'arrest')
+        train_df: Training dataframe
+        target_column: Target column name (default from config)
 
     Returns:
-        pd.DataFrame: Balanced training dataframe
+        Balanced training dataframe
+
+    Raises:
+        DataValidationError: If data contains NaN or non-numeric values
     """
     # Use config default if not provided
     if target_column is None:
@@ -45,7 +50,7 @@ def balance_data(train_df, target_column=None):
     # Separate features and target
     if target_column not in train_df.columns:
         logger.error(f"Target column '{target_column}' not found in DataFrame")
-        raise ValueError(f"Target column '{target_column}' not found")
+        raise DataValidationError(f"Target column '{target_column}' not found")
 
     X = train_df.drop(columns=[target_column])
     y = train_df[target_column]
@@ -56,7 +61,7 @@ def balance_data(train_df, target_column=None):
         logger.error(f"Non-numeric columns found: {non_numeric_cols}")
         logger.error(f"Column types: {X[non_numeric_cols].dtypes.to_dict()}")
         logger.error(f"Sample values: {X[non_numeric_cols].head(1).to_dict('records')}")
-        raise ValueError(
+        raise DataValidationError(
             f"Cannot balance data with non-numeric columns: {non_numeric_cols}. "
             f"All features must be numeric for SMOTE."
         )
@@ -69,7 +74,7 @@ def balance_data(train_df, target_column=None):
         nan_cols = nan_counts[nan_counts > 0].to_dict()
         logger.error(f"NaN values found in columns (this should not happen): {nan_cols}")
         logger.error("NaN values should be handled in upstream steps (enrichment, encoding)")
-        raise ValueError(
+        raise DataValidationError(
             f"Unexpected NaN values in {len(nan_cols)} columns: {list(nan_cols.keys())}. "
             f"Check data_enrichment.py and data_encoding.py for missing NaN handling."
         )
@@ -122,6 +127,6 @@ def balance_data(train_df, target_column=None):
     # Combine back into DataFrame
     balanced_df = pd.concat([X_resampled, y_resampled], axis=1)
 
-    logger.info(f"Balancing completed: {len(train_df)} → {len(balanced_df)} samples")
+    logger.info(f"Balancing completed: {len(train_df)} -> {len(balanced_df)} samples")
 
     return balanced_df

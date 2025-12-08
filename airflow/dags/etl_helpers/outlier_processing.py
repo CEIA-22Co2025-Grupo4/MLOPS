@@ -4,14 +4,12 @@ Outlier Processing Functions
 Functions for detecting and removing outliers from crime data.
 """
 
-import os
-import sys
-import numpy as np
 import logging
+from typing import Optional, Tuple
 
-# Add parent directory to path for config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from etl_config import config
+import pandas as pd
+
+from . import config
 
 logger = logging.getLogger(__name__)
 
@@ -19,41 +17,21 @@ logger = logging.getLogger(__name__)
 DISTANCE_COLUMN = "distance_crime_to_police_station"
 
 
-def apply_log_transformation(df, column=DISTANCE_COLUMN):
+def remove_outliers_std_method(
+    df: pd.DataFrame,
+    column: str = DISTANCE_COLUMN,
+    n_std: int = 3,
+) -> pd.DataFrame:
     """
-    Apply log1p transformation to reduce skewness and outlier influence.
+    Remove outliers using standard deviation method (mean +/- n*std).
 
     Args:
-        df (pd.DataFrame): Input dataframe
-        column (str): Column name to transform
+        df: Input dataframe (should be log-transformed)
+        column: Column name to check for outliers
+        n_std: Number of standard deviations for threshold (default: 3)
 
     Returns:
-        pd.DataFrame: DataFrame with transformed column
-    """
-    df_transformed = df.copy()
-
-    if column not in df_transformed.columns:
-        logger.warning(f"Column '{column}' not found in DataFrame")
-        return df_transformed
-
-    # Apply log1p transformation
-    df_transformed[column] = np.log1p(df_transformed[column])
-    logger.info(f"Applied log1p transformation to '{column}'")
-
-    return df_transformed
-
-
-def remove_outliers_std_method(df, column=DISTANCE_COLUMN, n_std=3):
-    """
-    Remove outliers using standard deviation method (mean ± n*std).
-
-    Args:
-        df (pd.DataFrame): Input dataframe (should be log-transformed)
-        column (str): Column name to check for outliers
-        n_std (int): Number of standard deviations for threshold (default: 3)
-
-    Returns:
-        pd.DataFrame: DataFrame with outliers removed
+        DataFrame with outliers removed
     """
     if column not in df.columns:
         logger.warning(f"Column '{column}' not found in DataFrame")
@@ -77,7 +55,7 @@ def remove_outliers_std_method(df, column=DISTANCE_COLUMN, n_std=3):
     outliers_removed = initial_count - len(df_no_outliers)
     outlier_pct = 100 * outliers_removed / initial_count if initial_count > 0 else 0
 
-    logger.info(f"Outlier detection using ±{n_std} std method:")
+    logger.info(f"Outlier detection using +/-{n_std} std method:")
     logger.info(f"  Bounds: {lower_bound:.2f} to {upper_bound:.2f}")
     logger.info(f"  Removed {outliers_removed} outliers ({outlier_pct:.2f}%)")
     logger.info(f"  Remaining records: {len(df_no_outliers)}")
@@ -85,7 +63,12 @@ def remove_outliers_std_method(df, column=DISTANCE_COLUMN, n_std=3):
     return df_no_outliers
 
 
-def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=None):
+def process_outliers(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    column: str = DISTANCE_COLUMN,
+    n_std: Optional[int] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Remove outliers from both train and test datasets.
     Uses statistics from train data only to avoid data leakage.
@@ -96,13 +79,13 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=None):
     3. Remove outliers from BOTH datasets using train statistics
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        column (str): Column to process
-        n_std (int): Number of standard deviations for outlier threshold
+        train_df: Training dataframe
+        test_df: Test dataframe
+        column: Column to process
+        n_std: Number of standard deviations for outlier threshold
 
     Returns:
-        tuple: (train_processed, test_processed) DataFrames
+        Tuple of (train_processed, test_processed)
     """
     # Use config default if not provided
     if n_std is None:
@@ -119,9 +102,15 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=None):
     test_nan_count = test_df[column].isna().sum()
 
     if train_nan_count > 0:
-        logger.warning(f"Found {train_nan_count} NaN values in train '{column}'. These rows will be excluded.")
+        logger.warning(
+            f"Found {train_nan_count} NaN values in train '{column}'. "
+            "These rows will be excluded."
+        )
     if test_nan_count > 0:
-        logger.warning(f"Found {test_nan_count} NaN values in test '{column}'. These rows will be excluded.")
+        logger.warning(
+            f"Found {test_nan_count} NaN values in test '{column}'. "
+            "These rows will be excluded."
+        )
 
     # Calculate statistics from TRAIN data only (avoid data leakage)
     # Note: pandas mean/std skip NaN by default
@@ -133,7 +122,7 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=None):
 
     logger.info(f"Train statistics: mean={mean_val:.2f}, std={std_val:.2f}")
     logger.info(
-        f"Outlier bounds (±{n_std} std): {lower_bound:.2f} to {upper_bound:.2f}"
+        f"Outlier bounds (+/-{n_std} std): {lower_bound:.2f} to {upper_bound:.2f}"
     )
 
     # Remove outliers from both datasets
@@ -153,10 +142,12 @@ def process_outliers(train_df, test_df, column=DISTANCE_COLUMN, n_std=None):
     test_removed = test_initial - len(test_processed)
 
     logger.info(
-        f"Train: removed {train_removed} outliers ({100 * train_removed / train_initial:.2f}%)"
+        f"Train: removed {train_removed} outliers "
+        f"({100 * train_removed / train_initial:.2f}%)"
     )
     logger.info(
-        f"Test: removed {test_removed} outliers ({100 * test_removed / test_initial:.2f}%)"
+        f"Test: removed {test_removed} outliers "
+        f"({100 * test_removed / test_initial:.2f}%)"
     )
     logger.info("Outlier removal completed")
 

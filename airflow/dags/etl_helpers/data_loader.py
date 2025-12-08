@@ -5,15 +5,15 @@ Functions for downloading Chicago crime data from Socrata API.
 """
 
 import os
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+
 import pandas as pd
 from sodapy import Socrata
-from datetime import datetime, timedelta
-import logging
-import sys
 
-# Add parent directory to path for config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from etl_config import config
+from . import config
+from .exceptions import DataLoadError
 
 logger = logging.getLogger(__name__)
 
@@ -23,55 +23,63 @@ POLICE_STATIONS_DATASET_ID = config.POLICE_STATIONS_DATASET_ID
 SOCRATA_DOMAIN = config.SOCRATA_DOMAIN
 
 
-def get_socrata_client():
+def get_socrata_client() -> Socrata:
     """
     Initialize Socrata client with app token from environment.
 
     Returns:
-        Socrata: Configured Socrata client
+        Configured Socrata client
+
+    Raises:
+        DataLoadError: If client initialization fails
     """
-    app_token = os.getenv("SOCRATA_APP_TOKEN")
-    if not app_token:
-        logger.warning(
-            "SOCRATA_APP_TOKEN not found in environment. API rate limits will apply."
-        )
+    try:
+        app_token = os.getenv("SOCRATA_APP_TOKEN")
+        if not app_token:
+            logger.warning(
+                "SOCRATA_APP_TOKEN not found in environment. API rate limits will apply."
+            )
 
-    client = Socrata(SOCRATA_DOMAIN, app_token, timeout=config.API_TIMEOUT)
-    return client
+        client = Socrata(SOCRATA_DOMAIN, app_token, timeout=config.API_TIMEOUT)
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize Socrata client: {e}")
+        raise DataLoadError(f"Failed to initialize Socrata client: {e}") from e
 
 
-def download_crimes_full(output_file=None):
+def download_crimes_full(output_file: Optional[str] = None) -> pd.DataFrame:
     """
     Download all crime records from the past year.
     Used for initial/first run when no historical data exists.
 
     Args:
-        output_file (str, optional): Path to save CSV output
+        output_file: Path to save CSV output (optional)
 
     Returns:
-        pd.DataFrame: Crime data for the past year
+        Crime data for the past year
+
+    Raises:
+        DataLoadError: If download fails
     """
     client = get_socrata_client()
 
     try:
-        # Calculate date range for past year (using config for rolling window)
-        one_year_ago = (datetime.now() - timedelta(days=config.ROLLING_WINDOW_DAYS)).strftime("%Y-%m-%d")
+        one_year_ago = (
+            datetime.now() - timedelta(days=config.ROLLING_WINDOW_DAYS)
+        ).strftime("%Y-%m-%d")
         today = datetime.now().strftime("%Y-%m-%d")
 
         logger.info(f"Downloading full crime dataset from {one_year_ago} to {today}...")
 
-        # Download all records with automatic pagination
         results = client.get_all(
             CRIME_DATASET_ID,
             where=f"date >= '{one_year_ago}' AND date <= '{today}'",
             order=":id",
         )
 
-        # Convert to DataFrame
         df = pd.DataFrame.from_records(results)
         logger.info(f"Downloaded {len(df)} crime records (full dataset)")
 
-        # Save to CSV if path provided
         if output_file:
             df.to_csv(output_file, index=False)
             logger.info(f"Saved to {output_file}")
@@ -80,27 +88,33 @@ def download_crimes_full(output_file=None):
 
     except Exception as e:
         logger.error(f"Error downloading full crime dataset: {e}")
-        raise
+        raise DataLoadError(f"Error downloading full crime dataset: {e}") from e
     finally:
         client.close()
 
 
-def download_crimes_incremental(start_date, end_date, output_file=None):
+def download_crimes_incremental(
+    start_date: str | datetime,
+    end_date: str | datetime,
+    output_file: Optional[str] = None,
+) -> pd.DataFrame:
     """
     Download crime records for a specific date range (incremental update).
 
     Args:
-        start_date (str or datetime): Start date in YYYY-MM-DD format
-        end_date (str or datetime): End date in YYYY-MM-DD format
-        output_file (str, optional): Path to save CSV output
+        start_date: Start date in YYYY-MM-DD format or datetime
+        end_date: End date in YYYY-MM-DD format or datetime
+        output_file: Path to save CSV output (optional)
 
     Returns:
-        pd.DataFrame: Crime data for the specified date range
+        Crime data for the specified date range
+
+    Raises:
+        DataLoadError: If download fails
     """
     client = get_socrata_client()
 
     try:
-        # Convert dates to strings if datetime objects
         if isinstance(start_date, datetime):
             start_date = start_date.strftime("%Y-%m-%d")
         if isinstance(end_date, datetime):
@@ -110,18 +124,15 @@ def download_crimes_incremental(start_date, end_date, output_file=None):
             f"Downloading incremental crime data from {start_date} to {end_date}..."
         )
 
-        # Download records for the specified date range
         results = client.get_all(
             CRIME_DATASET_ID,
             where=f"date >= '{start_date}' AND date < '{end_date}'",
             order=":id",
         )
 
-        # Convert to DataFrame
         df = pd.DataFrame.from_records(results)
         logger.info(f"Downloaded {len(df)} crime records (incremental)")
 
-        # Save to CSV if path provided
         if output_file:
             df.to_csv(output_file, index=False)
             logger.info(f"Saved to {output_file}")
@@ -130,34 +141,34 @@ def download_crimes_incremental(start_date, end_date, output_file=None):
 
     except Exception as e:
         logger.error(f"Error downloading incremental crime data: {e}")
-        raise
+        raise DataLoadError(f"Error downloading incremental crime data: {e}") from e
     finally:
         client.close()
 
 
-def download_police_stations(output_file=None):
+def download_police_stations(output_file: Optional[str] = None) -> pd.DataFrame:
     """
     Download Chicago police stations dataset.
 
     Args:
-        output_file (str, optional): Path to save CSV output
+        output_file: Path to save CSV output (optional)
 
     Returns:
-        pd.DataFrame: Police stations data with coordinates
+        Police stations data with coordinates
+
+    Raises:
+        DataLoadError: If download fails
     """
     client = get_socrata_client()
 
     try:
         logger.info("Downloading police stations dataset...")
 
-        # Download all police stations (only 23 records)
         results = client.get_all(POLICE_STATIONS_DATASET_ID, order=":id")
 
-        # Convert to DataFrame
         df = pd.DataFrame.from_records(results)
         logger.info(f"Downloaded {len(df)} police stations")
 
-        # Save to CSV if path provided
         if output_file:
             df.to_csv(output_file, index=False)
             logger.info(f"Saved to {output_file}")
@@ -166,6 +177,6 @@ def download_police_stations(output_file=None):
 
     except Exception as e:
         logger.error(f"Error downloading police stations: {e}")
-        raise
+        raise DataLoadError(f"Error downloading police stations: {e}") from e
     finally:
         client.close()

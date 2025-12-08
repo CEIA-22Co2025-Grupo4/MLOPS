@@ -4,33 +4,31 @@ Data Splitting Functions
 Functions for preprocessing and splitting Chicago crime data into train/test sets.
 """
 
-import os
-import sys
 import logging
+from typing import Optional, Tuple
+
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# Add parent directory to path for config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from etl_config import config
+from . import config
 
 logger = logging.getLogger(__name__)
 
 
-def preprocess_for_split(df):
+def preprocess_for_split(df: pd.DataFrame) -> pd.DataFrame:
     """
     Preprocess data before splitting into train/test.
     Removes duplicates, fills null values, and drops non-feature columns.
 
     Args:
-        df (pd.DataFrame): Raw enriched dataframe
+        df: Raw enriched dataframe
 
     Returns:
-        pd.DataFrame: Preprocessed dataframe ready for splitting
+        Preprocessed dataframe ready for splitting
     """
     logger.info("Preprocessing data for split...")
 
     try:
-        # Get initial record count
         initial_count = len(df)
         logger.info(f"Initial dataset: {initial_count} records")
 
@@ -40,7 +38,8 @@ def preprocess_for_split(df):
 
         if duplicates_removed > 0:
             logger.info(
-                f"Removed {duplicates_removed} duplicate records ({100 * duplicates_removed / initial_count:.2f}%)"
+                f"Removed {duplicates_removed} duplicate records "
+                f"({100 * duplicates_removed / initial_count:.2f}%)"
             )
         else:
             logger.info("No duplicates found")
@@ -51,7 +50,9 @@ def preprocess_for_split(df):
         if len(nan_cols) > 0:
             logger.warning(f"NaN values found in {len(nan_cols)} columns:")
             for col, count in nan_cols.items():
-                logger.warning(f"  {col}: {count} NaN ({100 * count / len(df_clean):.2f}%)")
+                logger.warning(
+                    f"  {col}: {count} NaN ({100 * count / len(df_clean):.2f}%)"
+                )
 
         # Fill null values in categorical columns
         categorical_fill_values = {
@@ -102,18 +103,23 @@ def preprocess_for_split(df):
         raise
 
 
-def split_train_test(df, test_size=None, random_state=None, stratify_column=None):
+def split_train_test(
+    df: pd.DataFrame,
+    test_size: Optional[float] = None,
+    random_state: Optional[int] = None,
+    stratify_column: Optional[str] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split dataframe into stratified train and test sets.
 
     Args:
-        df (pd.DataFrame): Preprocessed dataframe
-        test_size (float): Proportion of data for test set (default from config)
-        random_state (int): Random seed for reproducibility (default from config)
-        stratify_column (str): Column name to use for stratification (default from config)
+        df: Preprocessed dataframe
+        test_size: Proportion of data for test set (default from config)
+        random_state: Random seed for reproducibility (default from config)
+        stratify_column: Column name to use for stratification (default from config)
 
     Returns:
-        tuple: (train_df, test_df) DataFrames
+        Tuple of (train_df, test_df)
     """
     # Use config defaults if not provided
     if test_size is None:
@@ -159,7 +165,8 @@ def split_train_test(df, test_size=None, random_state=None, stratify_column=None
             logger.info("Stratification verification:")
             for value in train_dist.index:
                 logger.info(
-                    f"  {value} - Train: {100 * train_dist[value]:.2f}%, Test: {100 * test_dist[value]:.2f}%"
+                    f"  {value} - Train: {100 * train_dist[value]:.2f}%, "
+                    f"Test: {100 * test_dist[value]:.2f}%"
                 )
 
         return train_df, test_df

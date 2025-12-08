@@ -4,33 +4,33 @@ Data Encoding Functions
 Functions for encoding categorical and numerical variables.
 """
 
-import os
-import sys
+import logging
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-import logging
 from sklearn.preprocessing import OneHotEncoder
 
-# Add parent directory to path for config import
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from etl_config import config
+from . import config
 
 logger = logging.getLogger(__name__)
 
 
 def apply_log_transformation(
-    train_df, test_df, column="distance_crime_to_police_station"
-):
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    column: str = "distance_crime_to_police_station",
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Apply log1p transformation to reduce skewness.
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        column (str): Column name to transform
+        train_df: Training dataframe
+        test_df: Test dataframe
+        column: Column name to transform
 
     Returns:
-        tuple: (train_transformed, test_transformed) DataFrames
+        Tuple of (train_transformed, test_transformed)
     """
     logger.info(f"Applying log1p transformation to '{column}'...")
 
@@ -42,13 +42,17 @@ def apply_log_transformation(
         train_nan = train_transformed[column].isna().sum()
         test_nan = test_transformed[column].isna().sum()
         if train_nan > 0 or test_nan > 0:
-            logger.warning(f"NaN values found before log transform: train={train_nan}, test={test_nan}")
+            logger.warning(
+                f"NaN values found before log transform: train={train_nan}, test={test_nan}"
+            )
 
         # Check for negative values (log1p of negative returns NaN)
         train_neg = (train_transformed[column] < 0).sum()
         test_neg = (test_transformed[column] < 0).sum()
         if train_neg > 0 or test_neg > 0:
-            logger.warning(f"Negative values found (will become NaN): train={train_neg}, test={test_neg}")
+            logger.warning(
+                f"Negative values found (will become NaN): train={train_neg}, test={test_neg}"
+            )
 
         train_transformed[column] = np.log1p(train_transformed[column])
         test_transformed[column] = np.log1p(test_transformed[column])
@@ -59,17 +63,21 @@ def apply_log_transformation(
     return train_transformed, test_transformed
 
 
-def apply_cyclic_encoding(train_df, test_df, column="day_of_week"):
+def apply_cyclic_encoding(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    column: str = "day_of_week",
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Apply cyclic encoding to day of week (sine transformation).
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        column (str): Column name (0=Monday, 6=Sunday)
+        train_df: Training dataframe
+        test_df: Test dataframe
+        column: Column name (0=Monday, 6=Sunday)
 
     Returns:
-        tuple: (train_encoded, test_encoded) DataFrames
+        Tuple of (train_encoded, test_encoded)
     """
     logger.info(f"Applying cyclic encoding to '{column}'...")
 
@@ -81,9 +89,15 @@ def apply_cyclic_encoding(train_df, test_df, column="day_of_week"):
         train_nan = train_encoded[column].isna().sum()
         test_nan = test_encoded[column].isna().sum()
         if train_nan > 0 or test_nan > 0:
-            logger.warning(f"NaN values found in '{column}': train={train_nan}, test={test_nan}")
+            logger.warning(
+                f"NaN values found in '{column}': train={train_nan}, test={test_nan}"
+            )
             # Fill NaN with mode (most common day)
-            mode_val = train_encoded[column].mode()[0] if len(train_encoded[column].mode()) > 0 else 0
+            mode_val = (
+                train_encoded[column].mode()[0]
+                if len(train_encoded[column].mode()) > 0
+                else 0
+            )
             train_encoded[column] = train_encoded[column].fillna(mode_val)
             test_encoded[column] = test_encoded[column].fillna(mode_val)
             logger.info(f"Filled NaN in '{column}' with mode: {mode_val}")
@@ -102,17 +116,21 @@ def apply_cyclic_encoding(train_df, test_df, column="day_of_week"):
     return train_encoded, test_encoded
 
 
-def apply_onehot_encoding(train_df, test_df, columns=None):
+def apply_onehot_encoding(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, OneHotEncoder]]:
     """
     Apply one-hot encoding to low cardinality categorical variables.
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        columns (list): Columns to encode (default: ['season', 'day_time'])
+        train_df: Training dataframe
+        test_df: Test dataframe
+        columns: Columns to encode (default from config)
 
     Returns:
-        tuple: (train_encoded, test_encoded, encoders) - DataFrames and fitted encoders
+        Tuple of (train_encoded, test_encoded, encoders)
     """
     if columns is None:
         columns = list(config.ONEHOT_ENCODING_COLUMNS)
@@ -121,7 +139,7 @@ def apply_onehot_encoding(train_df, test_df, columns=None):
 
     train_encoded = train_df.copy()
     test_encoded = test_df.copy()
-    encoders = {}
+    encoders: Dict[str, OneHotEncoder] = {}
 
     for col in columns:
         if col not in train_encoded.columns:
@@ -132,9 +150,15 @@ def apply_onehot_encoding(train_df, test_df, columns=None):
         train_nan = train_encoded[col].isna().sum()
         test_nan = test_encoded[col].isna().sum()
         if train_nan > 0 or test_nan > 0:
-            logger.warning(f"NaN values found in '{col}': train={train_nan}, test={test_nan}")
+            logger.warning(
+                f"NaN values found in '{col}': train={train_nan}, test={test_nan}"
+            )
             # Fill with most frequent value
-            mode_val = train_encoded[col].mode()[0] if len(train_encoded[col].mode()) > 0 else "UNKNOWN"
+            mode_val = (
+                train_encoded[col].mode()[0]
+                if len(train_encoded[col].mode()) > 0
+                else "UNKNOWN"
+            )
             train_encoded[col] = train_encoded[col].fillna(mode_val)
             test_encoded[col] = test_encoded[col].fillna(mode_val)
             logger.info(f"Filled NaN in '{col}' with mode: {mode_val}")
@@ -166,17 +190,21 @@ def apply_onehot_encoding(train_df, test_df, columns=None):
     return train_encoded, test_encoded, encoders
 
 
-def apply_label_encoding(train_df, test_df, columns=None):
+def apply_label_encoding(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Apply label encoding to boolean variables (True=1, False=0).
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        columns (list): Columns to encode (default: ['domestic'])
+        train_df: Training dataframe
+        test_df: Test dataframe
+        columns: Columns to encode (default: ['domestic'])
 
     Returns:
-        tuple: (train_encoded, test_encoded) DataFrames
+        Tuple of (train_encoded, test_encoded)
     """
     if columns is None:
         columns = ["domestic"]
@@ -195,7 +223,9 @@ def apply_label_encoding(train_df, test_df, columns=None):
         train_nan = train_encoded[col].isna().sum()
         test_nan = test_encoded[col].isna().sum()
         if train_nan > 0 or test_nan > 0:
-            logger.warning(f"NaN values found in '{col}': train={train_nan}, test={test_nan}")
+            logger.warning(
+                f"NaN values found in '{col}': train={train_nan}, test={test_nan}"
+            )
             # Fill with False (0) for boolean columns
             train_encoded[col] = train_encoded[col].fillna(False)
             test_encoded[col] = test_encoded[col].fillna(False)
@@ -211,28 +241,31 @@ def apply_label_encoding(train_df, test_df, columns=None):
     return train_encoded, test_encoded
 
 
-def apply_frequency_encoding(train_df, test_df, columns=None):
+def apply_frequency_encoding(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, pd.Series]]:
     """
     Apply frequency encoding to high cardinality categorical variables.
     Uses normalized value counts from training data.
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        columns (list): Columns to encode
+        train_df: Training dataframe
+        test_df: Test dataframe
+        columns: Columns to encode (default from config)
 
     Returns:
-        tuple: (train_encoded, test_encoded, freq_maps) - DataFrames and frequency mappings
+        Tuple of (train_encoded, test_encoded, freq_maps)
     """
     if columns is None:
-        # Use columns from config
         columns = list(config.FREQUENCY_ENCODING_COLUMNS)
 
     logger.info(f"Applying frequency encoding to {len(columns)} columns...")
 
     train_encoded = train_df.copy()
     test_encoded = test_df.copy()
-    freq_maps = {}
+    freq_maps: Dict[str, pd.Series] = {}
 
     for col in columns:
         if col not in train_encoded.columns:
@@ -246,7 +279,9 @@ def apply_frequency_encoding(train_df, test_df, columns=None):
         # Create new column with _freq suffix
         new_col = f"{col}_freq"
         # Use fillna(0) for both train and test to handle any NaN values consistently
-        train_encoded[new_col] = train_encoded[col].map(freq_encoding).fillna(0).astype(float)
+        train_encoded[new_col] = (
+            train_encoded[col].map(freq_encoding).fillna(0).astype(float)
+        )
 
         # For test: use 0 for unseen categories
         test_encoded[new_col] = (
@@ -258,7 +293,10 @@ def apply_frequency_encoding(train_df, test_df, columns=None):
     return train_encoded, test_encoded, freq_maps
 
 
-def encode_data(train_df, test_df):
+def encode_data(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Apply all encoding transformations to train and test datasets.
 
@@ -271,11 +309,11 @@ def encode_data(train_df, test_df):
     6. Drop original categorical columns
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
+        train_df: Training dataframe
+        test_df: Test dataframe
 
     Returns:
-        tuple: (train_encoded, test_encoded) DataFrames
+        Tuple of (train_encoded, test_encoded)
     """
     logger.info("Starting data encoding pipeline...")
 
