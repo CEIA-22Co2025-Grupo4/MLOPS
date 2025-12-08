@@ -25,11 +25,13 @@ from .charts import (
 logger = logging.getLogger(__name__)
 
 # Import config for default values
-import sys
-import os
+import sys  # noqa: E402
+import os  # noqa: E402
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from etl_config import config
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+from etl_config import config  # noqa: E402
 
 
 def log_raw_data_metrics(

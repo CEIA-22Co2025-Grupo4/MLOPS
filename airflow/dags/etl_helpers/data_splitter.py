@@ -68,7 +68,9 @@ def preprocess_for_split(df: pd.DataFrame) -> pd.DataFrame:
                 null_count = df_clean[col].isna().sum()
                 if null_count > 0:
                     df_clean[col] = df_clean[col].fillna(fill_value)
-                    logger.info(f"Filled {null_count} NaN in '{col}' with '{fill_value}'")
+                    logger.info(
+                        f"Filled {null_count} NaN in '{col}' with '{fill_value}'"
+                    )
 
         # Fill null values in numeric columns with median
         numeric_fill_columns = ["beat", "ward", "community_area", "district"]
@@ -78,15 +80,21 @@ def preprocess_for_split(df: pd.DataFrame) -> pd.DataFrame:
                 if null_count > 0:
                     median_val = df_clean[col].median()
                     df_clean[col] = df_clean[col].fillna(median_val)
-                    logger.info(f"Filled {null_count} NaN in '{col}' with median: {median_val}")
+                    logger.info(
+                        f"Filled {null_count} NaN in '{col}' with median: {median_val}"
+                    )
 
         # Final NaN check - drop any remaining rows with NaN in critical columns
         remaining_nan = df_clean.isna().sum().sum()
         if remaining_nan > 0:
-            logger.warning(f"Remaining NaN values: {remaining_nan}. Dropping affected rows...")
+            logger.warning(
+                f"Remaining NaN values: {remaining_nan}. Dropping affected rows..."
+            )
             rows_before = len(df_clean)
             df_clean = df_clean.dropna()
-            logger.info(f"Dropped {rows_before - len(df_clean)} rows with remaining NaN")
+            logger.info(
+                f"Dropped {rows_before - len(df_clean)} rows with remaining NaN"
+            )
 
         # Drop non-feature columns (temporal features already extracted)
         columns_to_drop = list(config.COLUMNS_TO_DROP_PREPROCESS)

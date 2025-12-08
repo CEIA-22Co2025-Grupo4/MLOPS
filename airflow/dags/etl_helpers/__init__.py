@@ -17,10 +17,10 @@ if _parent_dir not in sys.path:
     sys.path.insert(0, _parent_dir)
 
 # Re-export config for convenience
-from etl_config import config
+from etl_config import config  # noqa: E402
 
 # Re-export MinIO functions for backward compatibility
-from .minio import (
+from .minio import (  # noqa: E402
     get_minio_client,
     set_bucket_lifecycle_policy,
     create_bucket_if_not_exists,
@@ -34,7 +34,7 @@ from .minio import (
 )
 
 # Re-export monitoring functions for backward compatibility
-from .monitoring import (
+from .monitoring import (  # noqa: E402
     log_raw_data_metrics,
     log_split_metrics,
     log_balance_metrics,
@@ -42,7 +42,7 @@ from .monitoring import (
 )
 
 # Re-export exceptions
-from .exceptions import (
+from .exceptions import (  # noqa: E402
     ETLError,
     DataValidationError,
     MinIOError,

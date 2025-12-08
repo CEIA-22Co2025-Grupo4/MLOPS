@@ -72,8 +72,12 @@ def balance_data(
     nan_counts = X.isna().sum()
     if nan_counts.any():
         nan_cols = nan_counts[nan_counts > 0].to_dict()
-        logger.error(f"NaN values found in columns (this should not happen): {nan_cols}")
-        logger.error("NaN values should be handled in upstream steps (enrichment, encoding)")
+        logger.error(
+            f"NaN values found in columns (this should not happen): {nan_cols}"
+        )
+        logger.error(
+            "NaN values should be handled in upstream steps (enrichment, encoding)"
+        )
         raise DataValidationError(
             f"Unexpected NaN values in {len(nan_cols)} columns: {list(nan_cols.keys())}. "
             f"Check data_enrichment.py and data_encoding.py for missing NaN handling."

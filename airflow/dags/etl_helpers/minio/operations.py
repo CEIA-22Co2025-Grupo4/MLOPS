@@ -7,7 +7,7 @@ Functions for uploading, downloading, and managing files in MinIO.
 import os
 import logging
 from io import BytesIO, StringIO
-from typing import List, Optional
+from typing import List
 
 import pandas as pd
 from botocore.exceptions import ClientError

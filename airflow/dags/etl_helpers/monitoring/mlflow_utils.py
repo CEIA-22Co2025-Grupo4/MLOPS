@@ -7,7 +7,7 @@ Helper functions for logging metrics, parameters, and artifacts to MLflow.
 import os
 import tempfile
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import matplotlib.pyplot as plt
 
