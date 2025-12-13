@@ -328,9 +328,9 @@ graph LR
 #### 3️⃣ Enrich Data
 - **Geoespacial:** Distancia a estación policial más cercana (GeoPandas)
 - **Temporal:**
-  - Season (Winter/Spring/Summer/Fall)
-  - Day of week (0=Monday, 6=Sunday)
-  - Day time (Morning/Afternoon/Evening/Night)
+  - Season (Winter/Spring/Summer/Autumn)
+  - Day of week (0=Monday, 6=Sunday) - encoded as sine for cyclical pattern
+  - Day time (Early Morning/Morning/Afternoon/Night)
 - **Limpieza:** Duplicados, valores nulos
 - **Output:** `s3://data/1-enriched-data/crimes_enriched_{date}.csv`
 - **Monitoring:** Logs raw data quality metrics to MLflow
@@ -423,6 +423,42 @@ s3://data/
 - **Catchup:** Habilitado (procesa meses faltantes)
 - **Max Active Runs:** 1 (evita ejecuciones concurrentes)
 
+## Variables de entorno requeridas
+
+Antes de ejecutar `make install`, asegúrate de configurar las siguientes variables en el archivo `.env`:
+
+```bash
+# Requeridas para el pipeline ETL
+SOCRATA_APP_TOKEN=tu_token_aqui    # Token de Socrata API (ver instrucciones abajo)
+DATA_REPO_BUCKET_NAME=data          # Bucket MinIO para datos
+
+# Ya configuradas por defecto (modificar solo si es necesario)
+AIRFLOW_UID=1000                    # UID del usuario para Airflow
+AWS_ACCESS_KEY_ID=minio             # Credenciales MinIO
+AWS_SECRET_ACCESS_KEY=minio123      # Credenciales MinIO
+```
+
+### Obtener Token de Socrata (Chicago Data Portal)
+
+El pipeline ETL descarga datos del Chicago Data Portal usando la API de Socrata. Para evitar límites de tasa, necesitas un App Token:
+
+1. Ir a https://data.cityofchicago.org/
+2. Crear una cuenta o iniciar sesión (click en "Sign In" arriba a la derecha)
+3. Una vez logueado, ir a tu perfil (click en tu nombre) → "Developer Settings"
+4. Click en "Create New App Token"
+5. Completar el formulario:
+   - **Application Name**: Nombre descriptivo (ej: "MLOps CEIA")
+   - **Description**: Descripción breve
+   - **Website** (opcional): Puede dejarse vacío
+6. Click en "Save" y copiar el **App Token** generado
+7. Agregar el token al archivo `.env`:
+   ```bash
+   SOCRATA_APP_TOKEN=tu_token_generado_aqui
+   ```
+
+> **Nota**: Sin el token, el pipeline funcionará pero con límites de velocidad más restrictivos.
+
+## Comandos disponibles (Makefile)
 ### Monitoreo del Pipeline
 
 Cada etapa del pipeline registra métricas en **MLflow**:
@@ -621,15 +657,11 @@ POST /predict
 **Request:**
 ```json
 {
+  "iucr_freq": 0.435,
   "primary_type_freq": 0.123,
   "location_description_freq": 0.045,
-  "beat_freq": 0.012,
-  "ward_freq": 0.034,
-  "community_area_freq": 0.028,
   "day_of_week_sin": 0.781,
   "x_coordinate_standardized": 1.234,
-  "longitude_standardized": -0.567,
-  "latitude_standardized": 0.890,
   "y_coordinate_standardized": -1.123,
   "distance_crime_to_police_station_standardized": 0.345
 }
@@ -709,15 +741,11 @@ GET /model/info
 curl -X POST "http://localhost:8800/predict" \
   -H "Content-Type: application/json" \
   -d '{
+    "iucr_freq": 0.435,
     "primary_type_freq": 0.123,
     "location_description_freq": 0.045,
-    "beat_freq": 0.012,
-    "ward_freq": 0.034,
-    "community_area_freq": 0.028,
     "day_of_week_sin": 0.781,
     "x_coordinate_standardized": 1.234,
-    "longitude_standardized": -0.567,
-    "latitude_standardized": 0.890,
     "y_coordinate_standardized": -1.123,
     "distance_crime_to_police_station_standardized": 0.345
   }'
@@ -874,9 +902,9 @@ El proyecto incluye un pipeline ETL completo para análisis de crímenes en Chic
 - Carga datos desde MinIO
 - Calcula distancia a estación policial más cercana (GeoPandas spatial join)
 - Crea features temporales:
-  - Season (Winter/Spring/Summer/Fall)
-  - Day of week (0-6)
-  - Day time (Morning/Afternoon/Evening/Night)
+  - Season (Winter/Spring/Summer/Autumn)
+  - Day of week (0-6) - encoded as sine for cyclical pattern
+  - Day time (Early Morning/Morning/Afternoon/Night)
 - Guarda en MinIO: `raw-data/crimes_enriched_YYYY-MM-DD.csv`
 
 **Tasks 4-8:** (Por implementar)
@@ -901,11 +929,7 @@ airflow/dags/
 
 ### Configuración
 
-**Variables de entorno requeridas (`.env`):**
-```bash
-SOCRATA_APP_TOKEN=tu_token_aqui  # Token de Socrata API
-DATA_REPO_BUCKET_NAME=data        # Bucket MinIO para datos
-```
+Las variables de entorno requeridas (`SOCRATA_APP_TOKEN`, `DATA_REPO_BUCKET_NAME`) están documentadas en la sección [Variables de entorno requeridas](#variables-de-entorno-requeridas) al inicio de este documento.
 
 **Dependencias principales:**
 - `sodapy` - Cliente Socrata API

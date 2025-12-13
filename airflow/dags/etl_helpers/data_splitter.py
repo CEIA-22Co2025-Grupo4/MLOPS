@@ -5,26 +5,30 @@ Functions for preprocessing and splitting Chicago crime data into train/test set
 """
 
 import logging
+from typing import Optional, Tuple
+
+import pandas as pd
 from sklearn.model_selection import train_test_split
+
+from . import config
 
 logger = logging.getLogger(__name__)
 
 
-def preprocess_for_split(df):
+def preprocess_for_split(df: pd.DataFrame) -> pd.DataFrame:
     """
     Preprocess data before splitting into train/test.
     Removes duplicates, fills null values, and drops non-feature columns.
 
     Args:
-        df (pd.DataFrame): Raw enriched dataframe
+        df: Raw enriched dataframe
 
     Returns:
-        pd.DataFrame: Preprocessed dataframe ready for splitting
+        Preprocessed dataframe ready for splitting
     """
     logger.info("Preprocessing data for split...")
 
     try:
-        # Get initial record count
         initial_count = len(df)
         logger.info(f"Initial dataset: {initial_count} records")
 
@@ -34,27 +38,67 @@ def preprocess_for_split(df):
 
         if duplicates_removed > 0:
             logger.info(
-                f"Removed {duplicates_removed} duplicate records ({100 * duplicates_removed / initial_count:.2f}%)"
+                f"Removed {duplicates_removed} duplicate records "
+                f"({100 * duplicates_removed / initial_count:.2f}%)"
             )
         else:
             logger.info("No duplicates found")
 
-        # Fill null values in location_description with 'UNKNOWN'
-        if "location_description" in df_clean.columns:
-            null_count = df_clean["location_description"].isna().sum()
-            if null_count > 0:
-                df_clean = df_clean.copy()
-                df_clean["location_description"] = df_clean[
-                    "location_description"
-                ].fillna("UNKNOWN")
-                logger.info(
-                    f"Filled {null_count} null values in 'location_description' with 'UNKNOWN'"
+        # Log NaN summary across all columns
+        nan_summary = df_clean.isna().sum()
+        nan_cols = nan_summary[nan_summary > 0]
+        if len(nan_cols) > 0:
+            logger.warning(f"NaN values found in {len(nan_cols)} columns:")
+            for col, count in nan_cols.items():
+                logger.warning(
+                    f"  {col}: {count} NaN ({100 * count / len(df_clean):.2f}%)"
                 )
-            else:
-                logger.info("No null values found in 'location_description'")
+
+        # Fill null values in categorical columns
+        categorical_fill_values = {
+            "location_description": "UNKNOWN",
+            "primary_type": "UNKNOWN",
+            "fbi_code": "UNKNOWN",
+            "nearest_police_station_district_name": "UNKNOWN",
+        }
+
+        df_clean = df_clean.copy()
+        for col, fill_value in categorical_fill_values.items():
+            if col in df_clean.columns:
+                null_count = df_clean[col].isna().sum()
+                if null_count > 0:
+                    df_clean[col] = df_clean[col].fillna(fill_value)
+                    logger.info(
+                        f"Filled {null_count} NaN in '{col}' with '{fill_value}'"
+                    )
+
+        # Fill null values in numeric columns with median
+        # Note: district is now frequency encoded (categorical), not filled with median
+        numeric_fill_columns = ["beat", "ward", "community_area"]
+        for col in numeric_fill_columns:
+            if col in df_clean.columns:
+                null_count = df_clean[col].isna().sum()
+                if null_count > 0:
+                    median_val = df_clean[col].median()
+                    df_clean[col] = df_clean[col].fillna(median_val)
+                    logger.info(
+                        f"Filled {null_count} NaN in '{col}' with median: {median_val}"
+                    )
+
+        # Final NaN check - drop any remaining rows with NaN in critical columns
+        remaining_nan = df_clean.isna().sum().sum()
+        if remaining_nan > 0:
+            logger.warning(
+                f"Remaining NaN values: {remaining_nan}. Dropping affected rows..."
+            )
+            rows_before = len(df_clean)
+            df_clean = df_clean.dropna()
+            logger.info(
+                f"Dropped {rows_before - len(df_clean)} rows with remaining NaN"
+            )
 
         # Drop non-feature columns (temporal features already extracted)
-        columns_to_drop = ["date", "index_right", "description"]
+        columns_to_drop = list(config.COLUMNS_TO_DROP_PREPROCESS)
         existing_drops = [col for col in columns_to_drop if col in df_clean.columns]
         if existing_drops:
             df_clean = df_clean.drop(columns=existing_drops)
@@ -68,19 +112,32 @@ def preprocess_for_split(df):
         raise
 
 
-def split_train_test(df, test_size=0.2, random_state=42, stratify_column="arrest"):
+def split_train_test(
+    df: pd.DataFrame,
+    test_size: Optional[float] = None,
+    random_state: Optional[int] = None,
+    stratify_column: Optional[str] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split dataframe into stratified train and test sets.
 
     Args:
-        df (pd.DataFrame): Preprocessed dataframe
-        test_size (float): Proportion of data for test set (default: 0.2)
-        random_state (int): Random seed for reproducibility (default: 42)
-        stratify_column (str): Column name to use for stratification (default: 'arrest')
+        df: Preprocessed dataframe
+        test_size: Proportion of data for test set (default from config)
+        random_state: Random seed for reproducibility (default from config)
+        stratify_column: Column name to use for stratification (default from config)
 
     Returns:
-        tuple: (train_df, test_df) DataFrames
+        Tuple of (train_df, test_df)
     """
+    # Use config defaults if not provided
+    if test_size is None:
+        test_size = config.SPLIT_TEST_SIZE
+    if random_state is None:
+        random_state = config.SPLIT_RANDOM_STATE
+    if stratify_column is None:
+        stratify_column = config.TARGET_COLUMN
+
     logger.info(
         f"Splitting data: {100 * (1 - test_size):.0f}% train, {100 * test_size:.0f}% test"
     )
@@ -117,7 +174,8 @@ def split_train_test(df, test_size=0.2, random_state=42, stratify_column="arrest
             logger.info("Stratification verification:")
             for value in train_dist.index:
                 logger.info(
-                    f"  {value} - Train: {100 * train_dist[value]:.2f}%, Test: {100 * test_dist[value]:.2f}%"
+                    f"  {value} - Train: {100 * train_dist[value]:.2f}%, "
+                    f"Test: {100 * test_dist[value]:.2f}%"
                 )
 
         return train_df, test_df

@@ -4,34 +4,40 @@ Data Scaling Functions
 Functions for scaling numerical features using StandardScaler.
 """
 
-import pandas as pd
 import logging
+from typing import List, Optional, Tuple
+
+import pandas as pd
 from sklearn.preprocessing import StandardScaler
+
+from . import config
+from .exceptions import DataValidationError
 
 logger = logging.getLogger(__name__)
 
 
-def scale_data(train_df, test_df, columns=None):
+def scale_data(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Scale numerical features using StandardScaler.
     Fits scaler on train data and transforms both train and test.
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        columns (list): Columns to scale (default: spatial columns)
+        train_df: Training dataframe
+        test_df: Test dataframe
+        columns: Columns to scale (default: spatial columns from config)
 
     Returns:
-        tuple: (train_scaled, test_scaled) DataFrames
+        Tuple of (train_scaled, test_scaled)
+
+    Raises:
+        DataValidationError: If data contains NaN values
     """
     if columns is None:
-        columns = [
-            "x_coordinate",
-            "y_coordinate",
-            "latitude",
-            "longitude",
-            "distance_crime_to_police_station",
-        ]
+        columns = list(config.SCALING_COLUMNS)
 
     logger.info(f"Scaling {len(columns)} numerical features...")
 
@@ -52,6 +58,24 @@ def scale_data(train_df, test_df, columns=None):
     # Extract columns to scale
     train_subset = train_df[existing_columns]
     test_subset = test_df[existing_columns]
+
+    # Validate: check for NaN values before scaling
+    train_nan = train_subset.isna().sum()
+    test_nan = test_subset.isna().sum()
+
+    if train_nan.any():
+        nan_cols = train_nan[train_nan > 0].to_dict()
+        logger.error(f"NaN values found in train data before scaling: {nan_cols}")
+        raise DataValidationError(
+            f"Cannot scale data with NaN values. Columns with NaN: {list(nan_cols.keys())}"
+        )
+
+    if test_nan.any():
+        nan_cols = test_nan[test_nan > 0].to_dict()
+        logger.error(f"NaN values found in test data before scaling: {nan_cols}")
+        raise DataValidationError(
+            f"Cannot scale data with NaN values. Columns with NaN: {list(nan_cols.keys())}"
+        )
 
     # Fit scaler on train data
     scaler = StandardScaler()

@@ -5,14 +5,22 @@ Functions for selecting relevant features using correlation analysis
 and mutual information.
 """
 
-import pandas as pd
 import logging
+from typing import List, Optional, Tuple
+
+import pandas as pd
 from sklearn.feature_selection import mutual_info_classif
+
+from . import config
 
 logger = logging.getLogger(__name__)
 
 
-def remove_correlated_features(train_df, test_df, threshold=0.65):
+def remove_correlated_features(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    threshold: Optional[float] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Remove highly correlated features based on Pearson correlation.
 
@@ -22,22 +30,20 @@ def remove_correlated_features(train_df, test_df, threshold=0.65):
     - Remove FBI_Code_freq (correlated with IUCR and Primary_Type)
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        threshold (float): Correlation threshold (default: 0.65)
+        train_df: Training dataframe
+        test_df: Test dataframe
+        threshold: Correlation threshold (default from config)
 
     Returns:
-        tuple: (train_filtered, test_filtered) DataFrames
+        Tuple of (train_filtered, test_filtered)
     """
+    if threshold is None:
+        threshold = config.CORRELATION_THRESHOLD
+
     logger.info("Removing highly correlated features...")
 
-    columns_to_drop = [
-        "beat",
-        "ward",
-        "community_area",
-        "nearest_police_station_district_name_freq",
-        "fbi_code_freq",
-    ]
+    # Use columns from config
+    columns_to_drop = list(config.FEATURE_SELECTION_DROP)
 
     # Only drop columns that exist
     existing_drops = [col for col in columns_to_drop if col in train_df.columns]
@@ -55,19 +61,27 @@ def remove_correlated_features(train_df, test_df, threshold=0.65):
     return train_filtered, test_filtered
 
 
-def select_features_mutual_info(train_df, test_df, target_column, mi_threshold=0.05):
+def select_features_mutual_info(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    target_column: str,
+    mi_threshold: Optional[float] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, List[str], pd.DataFrame]:
     """
     Select features using Mutual Information with threshold filtering.
 
     Args:
-        train_df (pd.DataFrame): Training dataframe with target
-        test_df (pd.DataFrame): Test dataframe with target
-        target_column (str): Target column name
-        mi_threshold (float): Minimum MI score to keep feature (default: 0.05)
+        train_df: Training dataframe with target
+        test_df: Test dataframe with target
+        target_column: Target column name
+        mi_threshold: Minimum MI score to keep feature (default from config)
 
     Returns:
-        tuple: (train_selected, test_selected, selected_features, mi_scores_df)
+        Tuple of (train_selected, test_selected, selected_features, mi_scores_df)
     """
+    if mi_threshold is None:
+        mi_threshold = config.MI_THRESHOLD
+
     logger.info(
         f"Applying Mutual Information feature selection (threshold={mi_threshold})..."
     )
@@ -78,7 +92,9 @@ def select_features_mutual_info(train_df, test_df, target_column, mi_threshold=0
     X_test = test_df.drop(columns=[target_column])
 
     # Calculate mutual information
-    mi_scores = mutual_info_classif(X_train, y_train, random_state=42)
+    mi_scores = mutual_info_classif(
+        X_train, y_train, random_state=config.SPLIT_RANDOM_STATE
+    )
 
     # Create scores DataFrame
     mi_scores_df = pd.DataFrame(
@@ -110,7 +126,12 @@ def select_features_mutual_info(train_df, test_df, target_column, mi_threshold=0
     return train_selected, test_selected, selected_features, mi_scores_df
 
 
-def select_features(train_df, test_df, target_column="arrest", mi_threshold=0.05):
+def select_features(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    target_column: Optional[str] = None,
+    mi_threshold: Optional[float] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Apply complete feature selection pipeline:
     1. Remove correlated features (correlation analysis)
@@ -120,14 +141,20 @@ def select_features(train_df, test_df, target_column="arrest", mi_threshold=0.05
     effectively, capturing both linear and non-linear relationships.
 
     Args:
-        train_df (pd.DataFrame): Training dataframe
-        test_df (pd.DataFrame): Test dataframe
-        target_column (str): Target column name (default: 'arrest')
-        mi_threshold (float): MI score threshold (default: 0.05)
+        train_df: Training dataframe
+        test_df: Test dataframe
+        target_column: Target column name (default from config)
+        mi_threshold: MI score threshold (default from config)
 
     Returns:
-        tuple: (train_selected, test_selected) DataFrames
+        Tuple of (train_selected, test_selected, mi_scores_df)
     """
+    # Use config defaults if not provided
+    if target_column is None:
+        target_column = config.TARGET_COLUMN
+    if mi_threshold is None:
+        mi_threshold = config.MI_THRESHOLD
+
     logger.info("Starting feature selection pipeline...")
     logger.info(f"Initial shapes: train={train_df.shape}, test={test_df.shape}")
 

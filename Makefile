@@ -1,4 +1,4 @@
-.PHONY: help up down restart install clean logs status airflow mlflow minio lint format
+.PHONY: help up down restart install clean logs status airflow mlflow minio lint format test test-cov
 
 help:
 	@echo "Available commands:"
@@ -13,6 +13,10 @@ help:
 	@echo "Code quality:"
 	@echo "  make lint      - Run ruff linter on Python code"
 	@echo "  make format    - Format Python code with ruff"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test      - Run all tests"
+	@echo "  make test-cov  - Run tests with coverage report"
 	@echo ""
 	@echo "Open web interfaces:"
 	@echo "  make airflow   - Open Airflow UI (http://localhost:8080)"
@@ -60,5 +64,13 @@ lint:
 
 format:
 	@echo "Formatting Python code with ruff..."
-	ruff format airflow/
-	ruff check --fix airflow/
+	ruff format airflow/ tests/
+	ruff check --fix airflow/ tests/
+
+test:
+	@echo "Running tests..."
+	uv run pytest
+
+test-cov:
+	@echo "Running tests with coverage..."
+	uv run pytest --cov=airflow/dags/etl_helpers --cov-report=term-missing
