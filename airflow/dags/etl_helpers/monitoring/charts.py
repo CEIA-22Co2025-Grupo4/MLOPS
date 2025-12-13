@@ -206,3 +206,111 @@ def create_correlation_heatmap(
 
     plt.tight_layout()
     return fig
+
+
+def create_pipeline_flow_chart(
+    raw_count: int,
+    enriched_count: int,
+    train_count: int,
+    test_count: int,
+    balanced_count: int,
+    final_train_count: int,
+    final_test_count: int,
+) -> plt.Figure:
+    """
+    Generate pipeline data flow chart showing record counts at each stage.
+
+    Args:
+        raw_count: Number of raw records
+        enriched_count: Number of enriched records
+        train_count: Number of training records after split
+        test_count: Number of test records after split
+        balanced_count: Number of records after balancing
+        final_train_count: Number of final training records
+        final_test_count: Number of final test records
+
+    Returns:
+        Matplotlib figure
+    """
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    stages = [
+        "Raw\nData",
+        "Enriched\nData",
+        "Train\nSplit",
+        "Balanced\nTrain",
+        "Final\nTrain",
+        "Final\nTest",
+    ]
+    counts = [
+        raw_count,
+        enriched_count,
+        train_count,
+        balanced_count,
+        final_train_count,
+        final_test_count,
+    ]
+
+    x_positions = [0, 1, 2.5, 3.5, 5, 5]
+    colors = ["#3498db", "#2ecc71", "#f39c12", "#e74c3c", "#9b59b6", "#1abc9c"]
+
+    bars = ax.bar(x_positions, counts, color=colors, alpha=0.7, width=0.6)
+
+    for bar, count in zip(bars, counts):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height,
+            f"{count:,}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+        )
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(stages, fontsize=11)
+
+    retention_texts = [
+        f"{(enriched_count / raw_count * 100):.1f}%" if raw_count > 0 else "N/A",
+        f"{(train_count / enriched_count * 100):.1f}%" if enriched_count > 0 else "N/A",
+        f"{(balanced_count / train_count * 100):.1f}%" if train_count > 0 else "N/A",
+        f"{(final_train_count / balanced_count * 100):.1f}%"
+        if balanced_count > 0
+        else "N/A",
+    ]
+
+    arrow_positions = [(0, 1), (1, 2.5), (2.5, 3.5), (3.5, 5)]
+
+    for (start, end), text in zip(arrow_positions, retention_texts):
+        mid_x = (start + end) / 2
+        mid_y = max(counts) * 0.5
+        ax.annotate(
+            text,
+            xy=(mid_x, mid_y),
+            fontsize=9,
+            ha="center",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+        )
+
+    ax.annotate(
+        f"Test: {test_count:,}\n({(test_count / enriched_count * 100):.1f}%)"
+        if enriched_count > 0
+        else f"Test: {test_count:,}",
+        xy=(2.5, train_count),
+        xytext=(1.5, max(counts) * 0.3),
+        fontsize=9,
+        ha="center",
+        bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.3),
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.3", lw=1.5),
+    )
+
+    ax.set_ylabel("Record Count", fontsize=12, fontweight="bold")
+    ax.set_title(
+        "ETL Pipeline Data Flow - Record Count by Stage", fontsize=14, fontweight="bold"
+    )
+    ax.grid(axis="y", alpha=0.3, linestyle="--")
+    ax.set_ylim(0, max(counts) * 1.15)
+
+    plt.tight_layout()
+    return fig

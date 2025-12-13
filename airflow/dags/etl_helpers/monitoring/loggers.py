@@ -20,6 +20,7 @@ from .charts import (
     create_comparison_bar_chart,
     create_raw_data_overview_chart,
     create_correlation_heatmap,
+    create_pipeline_flow_chart,
 )
 
 logger = logging.getLogger(__name__)
@@ -327,3 +328,80 @@ def log_feature_selection_metrics(
             "selected_features": len(selected_features),
             "dropped_features": len(dropped_features),
         }
+
+
+def log_pipeline_summary(
+    raw_count: int,
+    enriched_count: int,
+    train_count: int,
+    test_count: int,
+    balanced_count: int,
+    final_train_count: int,
+    final_test_count: int,
+    feature_count: int,
+    run_name: str = "pipeline_summary",
+) -> Dict[str, Any]:
+    """
+    Log overall pipeline summary showing data flow through all stages.
+
+    Args:
+        raw_count: Number of raw records
+        enriched_count: Number of enriched records (after cleaning)
+        train_count: Number of training records after split
+        test_count: Number of test records after split
+        balanced_count: Number of records after balancing
+        final_train_count: Number of final training records after feature selection
+        final_test_count: Number of final test records after feature selection
+        feature_count: Number of final features
+        run_name: MLflow run name
+
+    Returns:
+        Summary metrics dictionary
+    """
+    try:
+        import mlflow
+    except ImportError:
+        logger.warning("MLflow not installed, skipping monitoring")
+        return {}
+
+    logger.info(f"Logging pipeline summary to MLflow: {run_name}")
+
+    with mlflow.start_run(run_name=run_name):
+        metrics = {
+            "raw_records": raw_count,
+            "enriched_records": enriched_count,
+            "train_records": train_count,
+            "test_records": test_count,
+            "balanced_records": balanced_count,
+            "final_train_records": final_train_count,
+            "final_test_records": final_test_count,
+            "final_features": feature_count,
+            "enrichment_retention_pct": (enriched_count / raw_count * 100)
+            if raw_count > 0
+            else 0,
+            "balancing_change_pct": ((balanced_count - train_count) / train_count * 100)
+            if train_count > 0
+            else 0,
+            "total_final_records": final_train_count + final_test_count,
+            "overall_retention_pct": (
+                (final_train_count + final_test_count) / raw_count * 100
+            )
+            if raw_count > 0
+            else 0,
+        }
+
+        log_metrics(metrics)
+
+        fig = create_pipeline_flow_chart(
+            raw_count,
+            enriched_count,
+            train_count,
+            test_count,
+            balanced_count,
+            final_train_count,
+            final_test_count,
+        )
+        save_figure_and_log(fig, "charts/pipeline_flow.png")
+
+        logger.info("Pipeline summary logged successfully")
+        return metrics

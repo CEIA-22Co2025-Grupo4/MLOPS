@@ -9,6 +9,7 @@ from .loggers import (
     log_split_metrics,
     log_balance_metrics,
     log_feature_selection_metrics,
+    log_pipeline_summary,
 )
 
 from .mlflow_utils import (
@@ -23,6 +24,7 @@ from .charts import (
     create_comparison_bar_chart,
     create_raw_data_overview_chart,
     create_correlation_heatmap,
+    create_pipeline_flow_chart,
 )
 
 __all__ = [
@@ -31,6 +33,7 @@ __all__ = [
     "log_split_metrics",
     "log_balance_metrics",
     "log_feature_selection_metrics",
+    "log_pipeline_summary",
     # MLflow utils
     "log_metrics",
     "log_params",
@@ -41,4 +44,5 @@ __all__ = [
     "create_comparison_bar_chart",
     "create_raw_data_overview_chart",
     "create_correlation_heatmap",
+    "create_pipeline_flow_chart",
 ]
