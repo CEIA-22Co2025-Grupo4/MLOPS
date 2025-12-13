@@ -9,37 +9,91 @@ from sklearn.model_selection import train_test_split
 
 logger = logging.getLogger(__name__)
 
+NUMERIC_COLUMNS_REQUIRED = [
+    "x_coordinate",
+    "y_coordinate",
+    "latitude",
+    "longitude",
+    "distance_crime_to_police_station",
+]
+
+CATEGORICAL_COLUMNS_REQUIRED = [
+    "beat",
+    "ward",
+    "community_area",
+    "district",
+]
+
+
+def _remove_rows_with_nan(df):
+    """
+    Remove rows containing NaN values in critical columns.
+    
+    SMOTE requires all numeric features to be non-null. This function ensures
+    data quality by removing incomplete records before ML processing.
+    
+    Args:
+        df: DataFrame to clean
+        
+    Returns:
+        DataFrame with NaN rows removed
+    """
+    existing_numeric = [c for c in NUMERIC_COLUMNS_REQUIRED if c in df.columns]
+    existing_categorical = [c for c in CATEGORICAL_COLUMNS_REQUIRED if c in df.columns]
+    columns_to_check = existing_numeric + existing_categorical
+    
+    if not columns_to_check:
+        return df
+    
+    initial_count = len(df)
+    df_clean = df.dropna(subset=columns_to_check)
+    nan_removed = initial_count - len(df_clean)
+    
+    if nan_removed > 0:
+        nan_pct = 100 * nan_removed / initial_count
+        logger.info(f"Removed {nan_removed} rows with NaN values ({nan_pct:.2f}%)")
+        
+        for col in columns_to_check:
+            col_nan = df[col].isna().sum()
+            if col_nan > 0:
+                logger.debug(f"  Column '{col}': {col_nan} NaN values")
+    
+    return df_clean
+
 
 def preprocess_for_split(df):
     """
     Preprocess data before splitting into train/test.
-    Removes duplicates, fills null values, and drops non-feature columns.
-
+    
+    Processing steps:
+    1. Remove duplicate records
+    2. Fill null values in categorical columns where appropriate
+    3. Remove rows with NaN in numeric columns (required for SMOTE)
+    4. Drop non-feature columns
+    
     Args:
-        df (pd.DataFrame): Raw enriched dataframe
+        df: Raw enriched dataframe
 
     Returns:
-        pd.DataFrame: Preprocessed dataframe ready for splitting
+        Preprocessed dataframe ready for splitting
     """
     logger.info("Preprocessing data for split...")
 
     try:
-        # Get initial record count
         initial_count = len(df)
         logger.info(f"Initial dataset: {initial_count} records")
 
-        # Remove duplicates
         df_clean = df.drop_duplicates()
         duplicates_removed = initial_count - len(df_clean)
 
         if duplicates_removed > 0:
             logger.info(
-                f"Removed {duplicates_removed} duplicate records ({100 * duplicates_removed / initial_count:.2f}%)"
+                f"Removed {duplicates_removed} duplicate records "
+                f"({100 * duplicates_removed / initial_count:.2f}%)"
             )
         else:
             logger.info("No duplicates found")
 
-        # Fill null values in location_description with 'UNKNOWN'
         if "location_description" in df_clean.columns:
             null_count = df_clean["location_description"].isna().sum()
             if null_count > 0:
@@ -48,12 +102,11 @@ def preprocess_for_split(df):
                     "location_description"
                 ].fillna("UNKNOWN")
                 logger.info(
-                    f"Filled {null_count} null values in 'location_description' with 'UNKNOWN'"
+                    f"Filled {null_count} null values in 'location_description'"
                 )
-            else:
-                logger.info("No null values found in 'location_description'")
 
-        # Drop non-feature columns (temporal features already extracted)
+        df_clean = _remove_rows_with_nan(df_clean)
+
         columns_to_drop = ["date", "index_right", "description"]
         existing_drops = [col for col in columns_to_drop if col in df_clean.columns]
         if existing_drops:
