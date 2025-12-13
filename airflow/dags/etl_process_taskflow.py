@@ -6,6 +6,17 @@ import tempfile
 import pandas as pd
 from airflow.decorators import dag, task
 
+from etl_helpers.config import (
+    BUCKET_NAME,
+    PREFIXES,
+    LIFECYCLE_TTL_DAYS,
+    ROLLING_WINDOW_DAYS,
+    TARGET_COLUMN,
+    SPLIT_TEST_SIZE,
+    SPLIT_RANDOM_STATE,
+    OUTLIER_STD_THRESHOLD,
+    MI_THRESHOLD,
+)
 from etl_helpers.data_balancing import balance_data as balance_data_fn
 from etl_helpers.data_encoding import encode_data as encode_data_fn
 from etl_helpers.data_enrichment import enrich_crime_data
@@ -36,28 +47,15 @@ from etl_helpers.outlier_processing import process_outliers as process_outliers_
 
 logger = logging.getLogger(__name__)
 
-# Configuration
-BUCKET_NAME = os.getenv("DATA_REPO_BUCKET_NAME", "data")
-
-# Bucket structure
-PREFIX_RAW = "0-raw-data/"
-PREFIX_MERGED = "1-merged-data/"
-PREFIX_ENRICHED = "2-enriched-data/"
-PREFIX_SPLIT = "3-split-data/"
-PREFIX_OUTLIERS = "4-outliers/"
-PREFIX_ENCODED = "5-encoded/"
-PREFIX_SCALED = "6-scaled/"
-PREFIX_BALANCED = "7-balanced/"
-PREFIX_ML_READY = "ml-ready-data/"  # Final ML-ready datasets
-
-# Data processing parameters
-LIFECYCLE_TTL_DAYS = 60  # All files deleted after 60 days
-ROLLING_WINDOW_DAYS = 365  # Merged data contains 365 days of crimes
-TARGET_COLUMN = "arrest"  # ML target variable
-SPLIT_TEST_SIZE = 0.2
-SPLIT_RANDOM_STATE = 42
-OUTLIER_STD_THRESHOLD = 3  # Number of standard deviations for outlier detection
-MI_THRESHOLD = 0.05  # Mutual Information threshold for feature selection
+PREFIX_RAW = PREFIXES["raw"]
+PREFIX_MERGED = PREFIXES["merged"]
+PREFIX_ENRICHED = PREFIXES["enriched"]
+PREFIX_SPLIT = PREFIXES["split"]
+PREFIX_OUTLIERS = PREFIXES["outliers"]
+PREFIX_ENCODED = PREFIXES["encoded"]
+PREFIX_SCALED = PREFIXES["scaled"]
+PREFIX_BALANCED = PREFIXES["balanced"]
+PREFIX_ML_READY = PREFIXES["ml_ready"]
 
 default_args = {
     "depends_on_past": False,
