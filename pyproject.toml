@@ -46,3 +46,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+
+[tool.pyright]
+extraPaths = ["airflow/dags"]
