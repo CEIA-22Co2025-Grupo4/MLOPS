@@ -158,19 +158,19 @@ def create_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
             elif month in [6, 7, 8]:
                 return "Summer"
             else:  # 9, 10, 11
-                return "Fall"
+                return "Autumn"
 
         df["season"] = df["month"].apply(get_season)
 
         # Create Day Time feature (4 periods)
         def get_day_time(hour: int) -> str:
-            if 6 <= hour < 12:
+            if 0 <= hour < 6:
+                return "Early Morning"
+            elif 6 <= hour < 12:
                 return "Morning"
             elif 12 <= hour < 18:
                 return "Afternoon"
-            elif 18 <= hour < 24:
-                return "Evening"
-            else:  # 0-5
+            else:  # 18-23
                 return "Night"
 
         df["day_time"] = df["hour"].apply(get_day_time)

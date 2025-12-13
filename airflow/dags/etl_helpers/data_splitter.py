@@ -73,7 +73,8 @@ def preprocess_for_split(df: pd.DataFrame) -> pd.DataFrame:
                     )
 
         # Fill null values in numeric columns with median
-        numeric_fill_columns = ["beat", "ward", "community_area", "district"]
+        # Note: district is now frequency encoded (categorical), not filled with median
+        numeric_fill_columns = ["beat", "ward", "community_area"]
         for col in numeric_fill_columns:
             if col in df_clean.columns:
                 null_count = df_clean[col].isna().sum()

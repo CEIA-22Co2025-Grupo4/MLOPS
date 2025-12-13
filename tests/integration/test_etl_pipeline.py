@@ -59,10 +59,10 @@ class TestDataEnrichment:
         assert "day_of_week" in result.columns
         assert "day_time" in result.columns
         assert set(result["season"].unique()).issubset(
-            {"Winter", "Spring", "Summer", "Fall"}
+            {"Winter", "Spring", "Summer", "Autumn"}
         )
         assert set(result["day_time"].unique()).issubset(
-            {"Morning", "Afternoon", "Evening", "Night"}
+            {"Early Morning", "Morning", "Afternoon", "Night"}
         )
 
     def test_enrichment_preserves_record_count(
@@ -287,10 +287,10 @@ class TestDataScaling:
         train_scaled, test_scaled = scale_data(train_encoded, test_encoded)
 
         # Then: coordinate columns should be standardized
+        # Note: latitude/longitude excluded (redundant with x/y coordinates)
         assert "x_coordinate_standardized" in train_scaled.columns
         assert "y_coordinate_standardized" in train_scaled.columns
-        assert "latitude_standardized" in train_scaled.columns
-        assert "longitude_standardized" in train_scaled.columns
+        assert "distance_crime_to_police_station_standardized" in train_scaled.columns
 
 
 class TestDataBalancing:

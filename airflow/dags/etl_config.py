@@ -54,8 +54,10 @@ class ETLConfig:
     CRS_UTM_ZONE: int = 32616
 
     # Columns to keep after enrichment
+    # Note: latitude/longitude excluded - redundant with x/y coordinates
     COLUMNS_TO_KEEP: tuple = (
         "date",
+        "iucr",
         "primary_type",
         "description",
         "location_description",
@@ -68,8 +70,6 @@ class ETLConfig:
         "fbi_code",
         "x_coordinate",
         "y_coordinate",
-        "latitude",
-        "longitude",
         "distance_crime_to_police_station",
         "nearest_police_station_district",
         "nearest_police_station_district_name",
@@ -83,9 +83,12 @@ class ETLConfig:
 
     # High cardinality columns for frequency encoding
     FREQUENCY_ENCODING_COLUMNS: tuple = (
+        "iucr",
         "primary_type",
         "location_description",
         "fbi_code",
+        "district",
+        "nearest_police_station_district",
         "nearest_police_station_district_name",
         "beat",
         "ward",
@@ -96,19 +99,20 @@ class ETLConfig:
     ONEHOT_ENCODING_COLUMNS: tuple = ("season", "day_time")
 
     # Numeric columns to scale
+    # Note: latitude/longitude excluded - they're redundant with x/y coordinates
+    # (which are in Illinois State Plane projection, better for distance calculations)
     SCALING_COLUMNS: tuple = (
         "x_coordinate",
         "y_coordinate",
-        "latitude",
-        "longitude",
         "distance_crime_to_police_station",
     )
 
     # Columns to drop in feature selection (high correlation)
+    # These are the encoded column names (_freq suffix) created during encoding
     FEATURE_SELECTION_DROP: tuple = (
-        "beat",
-        "ward",
-        "community_area",
+        "beat_freq",
+        "ward_freq",
+        "community_area_freq",
         "nearest_police_station_district_name_freq",
         "fbi_code_freq",
     )

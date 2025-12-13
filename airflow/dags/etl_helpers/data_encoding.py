@@ -102,13 +102,14 @@ def apply_cyclic_encoding(
             test_encoded[column] = test_encoded[column].fillna(mode_val)
             logger.info(f"Filled NaN in '{column}' with mode: {mode_val}")
 
-        # Convert to 1-7 range and apply sine transformation
-        train_encoded[f"{column}_sin"] = np.sin(
-            2 * np.pi * (train_encoded[column] + 1) / 7
-        )
-        test_encoded[f"{column}_sin"] = np.sin(
-            2 * np.pi * (test_encoded[column] + 1) / 7
-        )
+        # Convert pandas dayofweek (0=Mon, 6=Sun) to notebook mapping (Sun=1, Mon=2, ..., Sat=7)
+        # Formula: day_num = ((dayofweek + 1) % 7) + 1
+        # This ensures: Sunday→1, Monday→2, Tuesday→3, ..., Saturday→7
+        train_day_num = ((train_encoded[column] + 1) % 7) + 1
+        test_day_num = ((test_encoded[column] + 1) % 7) + 1
+
+        train_encoded[f"{column}_sin"] = np.sin(2 * np.pi * train_day_num / 7)
+        test_encoded[f"{column}_sin"] = np.sin(2 * np.pi * test_day_num / 7)
         logger.info(f"Cyclic encoding applied: '{column}_sin' created")
     else:
         logger.warning(f"Column '{column}' not found in DataFrame")
@@ -170,8 +171,10 @@ def apply_onehot_encoding(
         train_array = ohe.fit_transform(train_encoded[[col]])
         test_array = ohe.transform(test_encoded[[col]])
 
-        # Create column names
-        feature_names = ohe.get_feature_names_out([col])
+        # Create column names (convert to snake_case for consistency)
+        raw_feature_names = ohe.get_feature_names_out([col])
+        # Convert to snake_case: replace spaces with underscores, lowercase
+        feature_names = [name.lower().replace(" ", "_") for name in raw_feature_names]
 
         # Create DataFrames and join
         train_ohe_df = pd.DataFrame(
@@ -338,9 +341,12 @@ def encode_data(
         "day_of_week",
         "day_time",
         "domestic",
+        "iucr",
         "primary_type",
         "location_description",
         "fbi_code",
+        "district",
+        "nearest_police_station_district",
         "nearest_police_station_district_name",
         "beat",
         "ward",

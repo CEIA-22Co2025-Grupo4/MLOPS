@@ -16,7 +16,7 @@ from etl_helpers.data_loader import (
 from etl_helpers.data_scaling import scale_data as scale_data_fn
 from etl_helpers.data_splitter import preprocess_for_split, split_train_test
 from etl_helpers.feature_selection import select_features as select_features_fn
-from etl_helpers.minio_utils import (
+from etl_helpers.minio import (
     check_file_exists,
     create_bucket_if_not_exists,
     download_to_dataframe,

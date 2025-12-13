@@ -328,9 +328,9 @@ graph LR
 #### 3️⃣ Enrich Data
 - **Geoespacial:** Distancia a estación policial más cercana (GeoPandas)
 - **Temporal:**
-  - Season (Winter/Spring/Summer/Fall)
-  - Day of week (0=Monday, 6=Sunday)
-  - Day time (Morning/Afternoon/Evening/Night)
+  - Season (Winter/Spring/Summer/Autumn)
+  - Day of week (0=Monday, 6=Sunday) - encoded as sine for cyclical pattern
+  - Day time (Early Morning/Morning/Afternoon/Night)
 - **Limpieza:** Duplicados, valores nulos
 - **Output:** `s3://data/1-enriched-data/crimes_enriched_{date}.csv`
 - **Monitoring:** Logs raw data quality metrics to MLflow
@@ -657,15 +657,11 @@ POST /predict
 **Request:**
 ```json
 {
+  "iucr_freq": 0.435,
   "primary_type_freq": 0.123,
   "location_description_freq": 0.045,
-  "beat_freq": 0.012,
-  "ward_freq": 0.034,
-  "community_area_freq": 0.028,
   "day_of_week_sin": 0.781,
   "x_coordinate_standardized": 1.234,
-  "longitude_standardized": -0.567,
-  "latitude_standardized": 0.890,
   "y_coordinate_standardized": -1.123,
   "distance_crime_to_police_station_standardized": 0.345
 }
@@ -745,15 +741,11 @@ GET /model/info
 curl -X POST "http://localhost:8800/predict" \
   -H "Content-Type: application/json" \
   -d '{
+    "iucr_freq": 0.435,
     "primary_type_freq": 0.123,
     "location_description_freq": 0.045,
-    "beat_freq": 0.012,
-    "ward_freq": 0.034,
-    "community_area_freq": 0.028,
     "day_of_week_sin": 0.781,
     "x_coordinate_standardized": 1.234,
-    "longitude_standardized": -0.567,
-    "latitude_standardized": 0.890,
     "y_coordinate_standardized": -1.123,
     "distance_crime_to_police_station_standardized": 0.345
   }'
@@ -910,9 +902,9 @@ El proyecto incluye un pipeline ETL completo para análisis de crímenes en Chic
 - Carga datos desde MinIO
 - Calcula distancia a estación policial más cercana (GeoPandas spatial join)
 - Crea features temporales:
-  - Season (Winter/Spring/Summer/Fall)
-  - Day of week (0-6)
-  - Day time (Morning/Afternoon/Evening/Night)
+  - Season (Winter/Spring/Summer/Autumn)
+  - Day of week (0-6) - encoded as sine for cyclical pattern
+  - Day time (Early Morning/Morning/Afternoon/Night)
 - Guarda en MinIO: `raw-data/crimes_enriched_YYYY-MM-DD.csv`
 
 **Tasks 4-8:** (Por implementar)
