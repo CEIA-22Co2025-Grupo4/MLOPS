@@ -1,7 +1,7 @@
 .PHONY: help setup install uninstall up down restart clean logs status train api airflow mlflow minio lint format test test-cov
 
 # Default SOCRATA token (user should override in .env)
-SOCRATA_TOKEN ?= your_token_here
+SOCRATA_TOKEN ?= EKLTQNlOZu4W6fgrYa5jUKg9E
 
 help:
 	@echo "=========================================="
@@ -41,7 +41,7 @@ help:
 # Setup directories and permissions
 setup:
 	@echo "Creating directories..."
-	@mkdir -p airflow/{config,dags,logs,plugins}
+	@mkdir -p airflow/config airflow/dags airflow/logs airflow/plugins
 	@echo "Setting permissions..."
 	@chmod 777 airflow/logs || sudo chmod 777 airflow/logs
 	@echo "Creating .env file..."
@@ -69,7 +69,7 @@ install: setup
 	@echo "Next steps:"
 	@echo "  1. Wait ~2 minutes for services to be healthy"
 	@echo "  2. Run: make status"
-	@echo "  3. Open Airflow: make aiflrow http://localhost:8080 (airflow/airflow)"
+	@echo "  3. Open Airflow: make airflow - http://localhost:8080 (airflow/airflow)"
 	@echo "  4. Trigger DAG 'etl_with_taskflow'"
 	@echo "  5. After ETL completes, run: make train"
 	@echo "  6. Then run: make champion"
