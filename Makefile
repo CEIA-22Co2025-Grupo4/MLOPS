@@ -1,7 +1,7 @@
 .PHONY: help setup install uninstall up down restart clean logs status train api airflow mlflow minio lint format test test-cov
 
 # Default SOCRATA token (user should override in .env)
-SOCRATA_TOKEN ?= EKLTQNlOZu4W6fgrYa5jUKg9E
+SOCRATA_TOKEN ?= your_token_here
 
 help:
 	@echo "=========================================="
