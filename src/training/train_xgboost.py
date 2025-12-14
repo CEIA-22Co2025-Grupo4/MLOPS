@@ -39,21 +39,38 @@ from xgboost import XGBClassifier
 
 import mlflow
 import mlflow.sklearn
+import mlflow.xgboost
 from mlflow.models import infer_signature
 import s3fs
+
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://s3:9000")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "data")
+MINIO_PREFIX = os.getenv("MINIO_PREFIX", "ml-ready-data")
+TRAIN_FILE = "chicago_crimes_and_stations_2024_final.csv"
+TEST_FILE = "chicago_crimes_and_stations_2024_final_test.csv"
+
+def get_s3_fs():
+    return s3fs.S3FileSystem(
+        key=os.getenv("AWS_ACCESS_KEY_ID", "minio"),
+        secret=os.getenv("AWS_SECRET_ACCESS_KEY", "minio123"),
+        client_kwargs={"endpoint_url": MINIO_ENDPOINT},
+    )
+
+
+
 
 # Configuration (pulled from environment; safe defaults for containers)
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "minio")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "minio123")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-MLFLOW_S3_ENDPOINT_URL = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://s3:9000")
+MLFLOW_S3_ENDPOINT_URL = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000")
 EXPERIMENT_NAME = "chicago_crimes_xgboost"
-
 # MinIO/S3 data location for train/test CSVs
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", MLFLOW_S3_ENDPOINT_URL)
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "data")
 MINIO_PREFIX = os.getenv("MINIO_PREFIX", "ml-ready-data")
-
+TRAIN_FILE = "chicago_crimes_and_stations_2024_final.csv"
+TEST_FILE = "chicago_crimes_and_stations_2024_final_test.csv"
 
 def get_s3_fs():
     """Create an s3fs client pointing to the MinIO endpoint."""
@@ -363,31 +380,22 @@ def train_xgboost_with_mlflow(X_train, X_test, y_train, y_test, experiment_id):
         print("\n[*] Creating model signature...")
         signature = infer_signature(X_train, y_pred_proba_test)
         
-        # Log model using pyfunc to avoid new API endpoints
+        # Log model using xgboost flavor for proper MLflow format
         print("[*] Logging model to MLFlow...")
         try:
-            # Use pyfunc with a simple wrapper to avoid logged-models API
-            import tempfile
-            import shutil
-            
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # Save model using pickle
-                import pickle
-                model_path = Path(tmpdir) / "model.pkl"
-                with open(model_path, 'wb') as f:
-                    pickle.dump(model, f)
-                
-                # Log as artifact
-                mlflow.log_artifact(str(model_path), artifact_path="model")
-            
-            print(f"  [OK] Model logged to MLFlow")
+            mlflow.xgboost.log_model(
+                model,
+                artifact_path="model",
+                signature=signature,
+                input_example=X_train.head(5)
+            )
+            print(f"  [OK] Model logged to MLFlow (xgboost flavor)")
             
         except Exception as e:
-            print(f"  [WARN] Failed to log with pyfunc, trying sklearn: {e}")
-            # Fallback to sklearn if needed
+            print(f"  [WARN] Failed to log with xgboost, trying sklearn: {e}")
             model_info = mlflow.sklearn.log_model(
                 model,
-                artifact_path="model_sklearn",
+                artifact_path="model",
                 signature=signature,
                 input_example=X_train.head(5)
             )
