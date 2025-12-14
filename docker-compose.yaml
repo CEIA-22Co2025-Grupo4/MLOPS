@@ -20,7 +20,7 @@
 
 # WARNING: This configuration is for local development. Do not use it in a production deployment.
 x-airflow-common: &airflow-common
-  build: './dockerfiles/airflow'
+  build: './docker/airflow'
   image: ${AIRFLOW_IMAGE_NAME:-extending_airflow:latest}
   profiles:
     - airflow
@@ -65,7 +65,7 @@ x-airflow-common: &airflow-common
 services:
   postgres:
     restart: always
-    build: './dockerfiles/postgres'
+    build: './docker/postgres'
     image: postgres_system
     container_name: postgres
     profiles:
@@ -153,7 +153,7 @@ services:
 
   mlflow:
     restart: always
-    build: "./dockerfiles/mlflow"
+    build: "./docker/mlflow"
     image: mlflow
     container_name: mlflow
     profiles:
@@ -163,7 +163,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "${MLFLOW_PORT:-5000}:5000"
+      - "${MLFLOW_PORT:-5001}:5000"
     networks:
       - frontend
       - backend
@@ -188,7 +188,7 @@ services:
   trainer:
     build:
       context: .
-      dockerfile: ./dockerfiles/trainer/Dockerfile  
+      dockerfile: ./docker/trainer/Dockerfile  
     profiles:
       - all    
     depends_on:
@@ -207,11 +207,13 @@ services:
       MINIO_PREFIX: ml-ready-data
     command: ["python", "mlflow_xgboost_poc_docker.py"]
     volumes:
-      - ./mlflow_scripts:/trainer
+      - ./src/training:/trainer
 
   fastapi:
     restart: always
-    build: "./dockerfiles/fastapi"
+    build:
+      context: .
+      dockerfile: docker/fastapi/Dockerfile
     image: backend_fastapi
     container_name: fastapi
     profiles:

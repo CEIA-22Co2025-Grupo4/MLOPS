@@ -39,6 +39,7 @@ from xgboost import XGBClassifier
 
 import mlflow
 import mlflow.sklearn
+import mlflow.xgboost
 from mlflow.models import infer_signature
 import s3fs
 
@@ -379,31 +380,22 @@ def train_xgboost_with_mlflow(X_train, X_test, y_train, y_test, experiment_id):
         print("\n[*] Creating model signature...")
         signature = infer_signature(X_train, y_pred_proba_test)
         
-        # Log model using pyfunc to avoid new API endpoints
+        # Log model using xgboost flavor for proper MLflow format
         print("[*] Logging model to MLFlow...")
         try:
-            # Use pyfunc with a simple wrapper to avoid logged-models API
-            import tempfile
-            import shutil
-            
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # Save model using pickle
-                import pickle
-                model_path = Path(tmpdir) / "model.pkl"
-                with open(model_path, 'wb') as f:
-                    pickle.dump(model, f)
-                
-                # Log as artifact
-                mlflow.log_artifact(str(model_path), artifact_path="model")
-            
-            print(f"  [OK] Model logged to MLFlow")
+            mlflow.xgboost.log_model(
+                model,
+                artifact_path="model",
+                signature=signature,
+                input_example=X_train.head(5)
+            )
+            print(f"  [OK] Model logged to MLFlow (xgboost flavor)")
             
         except Exception as e:
-            print(f"  [WARN] Failed to log with pyfunc, trying sklearn: {e}")
-            # Fallback to sklearn if needed
+            print(f"  [WARN] Failed to log with xgboost, trying sklearn: {e}")
             model_info = mlflow.sklearn.log_model(
                 model,
-                artifact_path="model_sklearn",
+                artifact_path="model",
                 signature=signature,
                 input_example=X_train.head(5)
             )
