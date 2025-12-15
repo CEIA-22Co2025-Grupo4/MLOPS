@@ -1,7 +1,7 @@
-.PHONY: help setup install uninstall up down restart clean logs status train api airflow mlflow minio lint format test test-cov
+.PHONY: help setup install uninstall up down restart clean logs status train drift drift-test champion reload api airflow mlflow minio lint format test test-cov
 
-# Default SOCRATA token (user should override in .env)
-SOCRATA_TOKEN ?= EKLTQNlOZu4W6fgrYa5jUKg9E
+# Default SOCRATA token (user should override in .env or Makefile)
+SOCRATA_TOKEN ?= YOUR_SOCRATA_TOKEN_HERE
 
 help:
 	@echo "=========================================="
@@ -22,9 +22,10 @@ help:
 	@echo "  make status    - Show status of all services"
 	@echo ""
 	@echo "ML Pipeline:"
-	@echo "  make train     - Train XGBoost model and register in MLflow"
-	@echo "  make champion  - Set latest model version as champion"
-	@echo "  make reload    - Reload model in API"
+	@echo "  make train      - Train XGBoost model and register in MLflow"
+	@echo "  make champion   - Set latest model version as champion"
+	@echo "  make reload     - Reload model in API"
+	@echo "  make drift      - Show drift monitoring instructions"
 	@echo ""
 	@echo "Web Interfaces:"
 	@echo "  make airflow   - Open Airflow UI (http://localhost:8080)"
@@ -123,6 +124,13 @@ status:
 train:
 	@echo "Training XGBoost model..."
 	docker-compose run --rm trainer python train_xgboost.py
+
+# Drift monitoring - open Airflow to trigger DAG
+drift:
+	@echo "Opening Airflow UI..."
+	@echo "-> Trigger DAG 'drift_with_taskflow'"
+	@echo "-> For testing, set parameter: test_mode = true"
+	@open http://localhost:8080 || xdg-open http://localhost:8080 2>/dev/null || echo "Open http://localhost:8080"
 
 # Set champion alias
 champion:

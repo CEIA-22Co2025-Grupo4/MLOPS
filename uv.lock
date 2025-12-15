@@ -3587,6 +3587,18 @@ wheels = [
 ]
 
 [[package]]
+name = "sodapy"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/1e/d01ef2bc1b6199edfb0d00302fe3642d61a09175dd3e78832c78301b2ab6/sodapy-2.2.0.tar.gz", hash = "sha256:58af376d3bb0dc3a1edc7c8cf9938f5de8f558b35e240438dd83647ac3621981", size = 54750, upload-time = "2022-08-31T13:18:39.719Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/27/f092405731decf73bde86b1468ad7d44a5e2623a93101dac0b0d8bd3f914/sodapy-2.2.0-py2.py3-none-any.whl", hash = "sha256:18f13bdec1891f3430ea138354d4aa4a1adfb77893a2f0d577601024221157c4", size = 15111, upload-time = "2022-08-31T13:18:35.062Z" },
+]
+
+[[package]]
 name = "soupsieve"
 version = "2.8"
 source = { registry = "https://pypi.org/simple" }
@@ -3901,6 +3913,7 @@ dependencies = [
     { name = "requests" },
     { name = "scikit-learn" },
     { name = "seaborn" },
+    { name = "sodapy" },
     { name = "sqlalchemy" },
     { name = "statsmodels" },
     { name = "threadpoolctl" },
@@ -3940,6 +3953,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "sodapy", specifier = ">=2.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
     { name = "statsmodels", specifier = ">=0.14.5" },
     { name = "threadpoolctl", specifier = ">=3.6.0" },

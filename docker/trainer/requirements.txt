@@ -9,3 +9,4 @@ mlflow
 s3fs
 boto3
 datetime
+psutil
