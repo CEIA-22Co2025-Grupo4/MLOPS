@@ -18,6 +18,8 @@ from .operations import (
     delete_object,
     download_to_dataframe,
     upload_from_dataframe,
+    upload_json,
+    download_json,
 )
 
 __all__ = [
@@ -33,4 +35,6 @@ __all__ = [
     "delete_object",
     "download_to_dataframe",
     "upload_from_dataframe",
+    "upload_json",
+    "download_json",
 ]

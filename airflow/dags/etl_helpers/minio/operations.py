@@ -4,10 +4,11 @@ MinIO File Operations
 Functions for uploading, downloading, and managing files in MinIO.
 """
 
+import json
 import os
 import logging
 from io import BytesIO, StringIO
-from typing import List
+from typing import Any, Dict, List
 
 import pandas as pd
 from botocore.exceptions import ClientError
@@ -273,3 +274,88 @@ def upload_from_dataframe(
     except Exception as e:
         logger.error(f"Error uploading DataFrame to MinIO: {e}")
         raise MinIOError(f"Error uploading DataFrame to MinIO: {e}") from e
+
+
+def upload_json(
+    data: Dict[str, Any],
+    bucket_name: str,
+    object_key: str,
+) -> bool:
+    """
+    Upload a dictionary as a JSON file to MinIO.
+
+    Args:
+        data: Dictionary to upload
+        bucket_name: Name of the MinIO bucket
+        object_key: Key (path) for the object in MinIO
+
+    Returns:
+        True if upload successful
+
+    Raises:
+        MinIOError: If upload fails
+    """
+    client = get_minio_client()
+
+    try:
+        create_bucket_if_not_exists(bucket_name)
+        json_bytes = json.dumps(data, indent=2).encode("utf-8")
+
+        client.put_object(
+            Bucket=bucket_name,
+            Key=object_key,
+            Body=BytesIO(json_bytes),
+            ContentLength=len(json_bytes),
+            ContentType="application/json",
+        )
+
+        file_size = len(json_bytes) / 1024
+        logger.info(
+            f"Uploaded JSON ({file_size:.2f} KB) to '{bucket_name}/{object_key}'"
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error uploading JSON to MinIO: {e}")
+        raise MinIOError(f"Error uploading JSON to MinIO: {e}") from e
+
+
+def download_json(bucket_name: str, object_key: str) -> Dict[str, Any]:
+    """
+    Download a JSON file from MinIO and return as a dictionary.
+
+    Args:
+        bucket_name: Name of the MinIO bucket
+        object_key: Key (path) of the JSON object in MinIO
+
+    Returns:
+        Dictionary with the JSON data
+
+    Raises:
+        MinIOError: If download fails or object doesn't exist
+    """
+    client = get_minio_client()
+
+    try:
+        logger.info(f"Downloading JSON from '{bucket_name}/{object_key}'...")
+        response = client.get_object(Bucket=bucket_name, Key=object_key)
+        json_bytes = response["Body"].read()
+        data = json.loads(json_bytes.decode("utf-8"))
+        file_size = len(json_bytes) / 1024
+        logger.info(
+            f"Downloaded JSON ({file_size:.2f} KB) from '{bucket_name}/{object_key}'"
+        )
+        return data
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "404":
+            logger.error(f"Object not found: '{bucket_name}/{object_key}'")
+            raise MinIOError(f"Object not found: '{bucket_name}/{object_key}'") from e
+        else:
+            logger.error(f"Error downloading JSON: {e}")
+            raise MinIOError(f"Error downloading JSON: {e}") from e
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in '{bucket_name}/{object_key}': {e}")
+        raise MinIOError(f"Invalid JSON in '{bucket_name}/{object_key}': {e}") from e
+    except Exception as e:
+        logger.error(f"Unexpected error downloading JSON: {e}")
+        raise MinIOError(f"Unexpected error downloading JSON: {e}") from e
