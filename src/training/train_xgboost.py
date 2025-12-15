@@ -265,8 +265,8 @@ def train_xgboost_with_mlflow(X_train, X_test, y_train, y_test, experiment_id):
             search_spaces = search_spaces,
             scoring = 'average_precision',
             cv = 3,
-            n_iter = 40,        
-            n_jobs = -1,        
+            n_iter = 10,        # Reduced from 40 for Docker memory limits
+            n_jobs = 1,         # Sequential to avoid memory issues
             verbose = 0,
             random_state = 1337
         )
@@ -458,9 +458,37 @@ def train_xgboost_with_mlflow(X_train, X_test, y_train, y_test, experiment_id):
         raise e
 
 
+def save_reference_dataset(X_train, y_train, model):
+    """
+    Save training data with predictions as reference for drift monitoring.
+
+    The reference dataset includes:
+    - All features from training
+    - Actual labels (arrest)
+    - Model predictions (for prediction drift monitoring)
+    """
+    fs = get_s3_fs()
+
+    # Create reference dataframe with features, labels, and predictions
+    ref_df = X_train.copy()
+    ref_df['arrest'] = y_train.values
+    ref_df['prediction'] = model.predict(X_train)
+    ref_df['prediction_proba'] = model.predict_proba(X_train)[:, 1]
+
+    # Save to drift/reference/ prefix with date
+    today = datetime.now().strftime("%Y-%m-%d")
+    ref_path = f"{MINIO_BUCKET}/drift/reference/reference_{today}.csv"
+
+    with fs.open(ref_path, 'w') as f:
+        ref_df.to_csv(f, index=False)
+
+    print(f"  [OK] Reference dataset saved: {ref_path}")
+    print(f"  [OK] Shape: {ref_df.shape[0]} rows, {ref_df.shape[1]} columns")
+
+
 def main():
     """Main execution function"""
-    
+
     print("\n" + "="*70)
     print("XGBOOST POC WITH MLFLOW - CHICAGO CRIMES ARREST PREDICTION")
     print("="*70)
@@ -477,6 +505,10 @@ def main():
             X_train, X_test, y_train, y_test, experiment_id
         )
         
+        # Save reference dataset for drift monitoring
+        print("\n[*] Saving reference dataset for drift monitoring...")
+        save_reference_dataset(X_train, y_train, model)
+
         # Final summary
         print("\n" + "="*70)
         print("POC COMPLETED SUCCESSFULLY")
