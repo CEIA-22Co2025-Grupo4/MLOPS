@@ -15,6 +15,8 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from preprocessing import preprocess_raw_crime_data, create_temporal_features
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -29,31 +31,45 @@ model_info = None
 
 class CrimeFeatures(BaseModel):
     """Input features for prediction (7 features after preprocessing)."""
+
     iucr_freq: float = Field(..., description="Frequency encoding of IUCR code")
-    primary_type_freq: float = Field(..., description="Frequency encoding of primary crime type")
-    location_description_freq: float = Field(..., description="Frequency encoding of location")
+    primary_type_freq: float = Field(
+        ..., description="Frequency encoding of primary crime type"
+    )
+    location_description_freq: float = Field(
+        ..., description="Frequency encoding of location"
+    )
     day_of_week_sin: float = Field(..., description="Sine encoding of day of week")
-    x_coordinate_standardized: float = Field(..., description="Standardized X coordinate")
-    y_coordinate_standardized: float = Field(..., description="Standardized Y coordinate")
-    distance_crime_to_police_station_standardized: float = Field(..., description="Standardized distance to nearest police station")
+    x_coordinate_standardized: float = Field(
+        ..., description="Standardized X coordinate"
+    )
+    y_coordinate_standardized: float = Field(
+        ..., description="Standardized Y coordinate"
+    )
+    distance_crime_to_police_station_standardized: float = Field(
+        ..., description="Standardized distance to nearest police station"
+    )
 
     model_config = {
         "json_schema_extra": {
-            "examples": [{
-                "iucr_freq": 0.03,
-                "primary_type_freq": 0.1,
-                "location_description_freq": 0.05,
-                "day_of_week_sin": 0.5,
-                "x_coordinate_standardized": 0.12,
-                "y_coordinate_standardized": -0.34,
-                "distance_crime_to_police_station_standardized": 0.56
-            }]
+            "examples": [
+                {
+                    "iucr_freq": 0.03,
+                    "primary_type_freq": 0.1,
+                    "location_description_freq": 0.05,
+                    "day_of_week_sin": 0.5,
+                    "x_coordinate_standardized": 0.12,
+                    "y_coordinate_standardized": -0.34,
+                    "distance_crime_to_police_station_standardized": 0.56,
+                }
+            ]
         }
     }
 
 
 class PredictionResponse(BaseModel):
     """Response for single prediction."""
+
     prediction: bool
     probability: float
     model_version: str
@@ -62,11 +78,13 @@ class PredictionResponse(BaseModel):
 
 class BatchPredictionRequest(BaseModel):
     """Request for batch predictions."""
+
     instances: list[CrimeFeatures] = Field(..., max_length=1000)
 
 
 class BatchPredictionResponse(BaseModel):
     """Response for batch predictions."""
+
     predictions: list[dict]
     count: int
     model_version: str
@@ -75,6 +93,7 @@ class BatchPredictionResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response."""
+
     status: str
     model_loaded: bool
     model_name: Optional[str] = None
@@ -84,6 +103,7 @@ class HealthResponse(BaseModel):
 
 class ModelInfoResponse(BaseModel):
     """Model information response."""
+
     name: str
     version: str
     alias: str
@@ -91,35 +111,74 @@ class ModelInfoResponse(BaseModel):
     metrics: Optional[dict] = None
 
 
+class RawCrimeData(BaseModel):
+    """Raw crime data input (before preprocessing)."""
+
+    iucr: str = Field(..., description="IUCR code")
+    primary_type: str = Field(..., description="Primary crime type")
+    location_description: str = Field(..., description="Location description")
+    date: Optional[str] = Field(None, description="Crime date (YYYY-MM-DD HH:MM:SS)")
+    day_of_week: Optional[int] = Field(
+        None, ge=0, le=6, description="Day of week (0=Mon, 6=Sun)"
+    )
+    x_coordinate: float = Field(..., description="X coordinate (State Plane)")
+    y_coordinate: float = Field(..., description="Y coordinate (State Plane)")
+    distance_crime_to_police_station: float = Field(
+        ..., description="Distance to nearest police station (meters)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "iucr": "0820",
+                    "primary_type": "THEFT",
+                    "location_description": "STREET",
+                    "date": "2024-01-15 14:30:00",
+                    "x_coordinate": 1176096.0,
+                    "y_coordinate": 1912547.0,
+                    "distance_crime_to_police_station": 1250.5,
+                }
+            ]
+        }
+    }
+
+
+class RawBatchPredictionRequest(BaseModel):
+    """Request for batch predictions with raw data."""
+
+    instances: list[RawCrimeData] = Field(..., max_length=1000)
+
+
 def load_model_from_registry():
     """Load model from MLflow Model Registry using champion alias."""
     global model, model_version, model_info
-    
+
     try:
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         logger.info(f"Connecting to MLflow at {MLFLOW_TRACKING_URI}")
-        
+
         model_uri = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
         logger.info(f"Loading model from {model_uri}")
-        
+
         model = mlflow.pyfunc.load_model(model_uri)
-        
+
         client = mlflow.tracking.MlflowClient()
         model_version_info = client.get_model_version_by_alias(MODEL_NAME, MODEL_ALIAS)
         model_version = model_version_info.version
-        
+
         run = client.get_run(model_version_info.run_id)
         model_info = {
             "name": MODEL_NAME,
             "version": model_version,
             "alias": MODEL_ALIAS,
             "run_id": model_version_info.run_id,
-            "metrics": run.data.metrics
+            "metrics": run.data.metrics,
         }
-        
+
         logger.info(f"Model loaded successfully: {MODEL_NAME} v{model_version}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         model = None
@@ -165,8 +224,10 @@ of a reported crime in Chicago resulting in an arrest.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check and model status |
-| POST | `/predict` | Single prediction |
-| POST | `/predict/batch` | Batch predictions (max 1000) |
+| POST | `/predict` | Single prediction (preprocessed features) |
+| POST | `/predict/batch` | Batch predictions (preprocessed features) |
+| POST | `/predict/raw` | Single prediction (raw crime data) |
+| POST | `/predict/raw/batch` | Batch predictions (raw crime data) |
 | GET | `/model/info` | Model metadata and metrics |
 | POST | `/model/reload` | Hot reload model from registry |
 
@@ -192,7 +253,7 @@ def root():
         "service": "Chicago Crime Arrest Prediction API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
 
 
@@ -204,7 +265,7 @@ def health_check():
         model_loaded=model is not None,
         model_name=MODEL_NAME if model else None,
         model_version=model_version if model else None,
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.utcnow().isoformat(),
     )
 
 
@@ -214,70 +275,75 @@ def predict(features: CrimeFeatures):
     if model is None:
         raise HTTPException(
             status_code=503,
-            detail="Model not loaded. Please try again later or call /model/reload"
+            detail="Model not loaded. Please try again later or call /model/reload",
         )
-    
+
     try:
         df = pd.DataFrame([features.model_dump()])
-        
-        if hasattr(model, '_model_impl') and hasattr(model._model_impl, 'feature_names_in_'):
+
+        if hasattr(model, "_model_impl") and hasattr(
+            model._model_impl, "feature_names_in_"
+        ):
             expected_features = list(model._model_impl.feature_names_in_)
             df = df[expected_features]
-        
+
         prediction_proba = model.predict(df)
-        
+
         if isinstance(prediction_proba, np.ndarray):
             prob = float(prediction_proba[0])
         else:
             prob = float(prediction_proba.iloc[0])
-        
+
         prediction = prob >= 0.5
-        
+
         return PredictionResponse(
             prediction=prediction,
             probability=round(prob, 4),
             model_version=model_version or "unknown",
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.utcnow().isoformat(),
         )
-        
+
     except Exception as e:
         logger.error(f"Prediction error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/predict/batch", response_model=BatchPredictionResponse, tags=["Predictions"])
+@app.post(
+    "/predict/batch", response_model=BatchPredictionResponse, tags=["Predictions"]
+)
 def predict_batch(request: BatchPredictionRequest):
     """Make batch predictions (max 1000 instances)."""
     if model is None:
         raise HTTPException(
             status_code=503,
-            detail="Model not loaded. Please try again later or call /model/reload"
+            detail="Model not loaded. Please try again later or call /model/reload",
         )
-    
+
     try:
         df = pd.DataFrame([f.model_dump() for f in request.instances])
-        
-        if hasattr(model, '_model_impl') and hasattr(model._model_impl, 'feature_names_in_'):
+
+        if hasattr(model, "_model_impl") and hasattr(
+            model._model_impl, "feature_names_in_"
+        ):
             expected_features = list(model._model_impl.feature_names_in_)
             df = df[expected_features]
-        
+
         predictions_proba = model.predict(df)
-        
+
         results = []
         for prob in predictions_proba:
             prob_val = float(prob)
-            results.append({
-                "prediction": prob_val >= 0.5,
-                "probability": round(prob_val, 4)
-            })
-        
+            results.append(
+                {"prediction": prob_val >= 0.5, "probability": round(prob_val, 4)}
+            )
+
         return BatchPredictionResponse(
             predictions=results,
             count=len(results),
             model_version=model_version or "unknown",
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.utcnow().isoformat(),
         )
-        
+
     except Exception as e:
         logger.error(f"Batch prediction error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -287,11 +353,8 @@ def predict_batch(request: BatchPredictionRequest):
 def get_model_info():
     """Get information about the currently loaded model."""
     if model_info is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not loaded"
-        )
-    
+        raise HTTPException(status_code=503, detail="Model not loaded")
+
     return ModelInfoResponse(**model_info)
 
 
@@ -299,15 +362,135 @@ def get_model_info():
 def reload_model():
     """Reload model from MLflow registry."""
     success = load_model_from_registry()
-    
+
     if success:
         return {
             "status": "success",
             "message": f"Model reloaded: {MODEL_NAME} v{model_version}",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
     else:
         raise HTTPException(
-            status_code=500,
-            detail="Failed to reload model. Check logs for details."
+            status_code=500, detail="Failed to reload model. Check logs for details."
         )
+
+
+@app.post("/predict/raw", response_model=PredictionResponse, tags=["Raw Predictions"])
+def predict_raw(raw_data: RawCrimeData):
+    """
+    Make a prediction from raw crime data.
+
+    This endpoint accepts raw crime data (before preprocessing) and
+    automatically applies encoding and scaling before prediction.
+
+    Note: For batch predictions with raw data, use /predict/raw/batch
+    """
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Please try again later or call /model/reload",
+        )
+
+    try:
+        # Convert to DataFrame
+        df = pd.DataFrame([raw_data.model_dump()])
+
+        # Create day_of_week from date if not provided
+        if raw_data.day_of_week is None and raw_data.date is not None:
+            df = create_temporal_features(df)
+
+        # Preprocess raw data
+        features_df = preprocess_raw_crime_data(df)
+
+        if features_df.empty or len(features_df.columns) == 0:
+            raise ValueError("Preprocessing resulted in empty features")
+
+        # Reorder columns to match model expectations
+        if hasattr(model, "_model_impl") and hasattr(
+            model._model_impl, "feature_names_in_"
+        ):
+            expected_features = list(model._model_impl.feature_names_in_)
+            features_df = features_df[expected_features]
+
+        # Make prediction
+        prediction_proba = model.predict(features_df)
+
+        if isinstance(prediction_proba, np.ndarray):
+            prob = float(prediction_proba[0])
+        else:
+            prob = float(prediction_proba.iloc[0])
+
+        prediction = prob >= 0.5
+
+        return PredictionResponse(
+            prediction=prediction,
+            probability=round(prob, 4),
+            model_version=model_version or "unknown",
+            timestamp=datetime.utcnow().isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"Raw prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/predict/raw/batch",
+    response_model=BatchPredictionResponse,
+    tags=["Raw Predictions"],
+)
+def predict_raw_batch(request: RawBatchPredictionRequest):
+    """
+    Make batch predictions from raw crime data.
+
+    This endpoint accepts a batch of raw crime records and
+    automatically applies encoding and scaling before prediction.
+
+    Maximum 1000 instances per request.
+    """
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Please try again later or call /model/reload",
+        )
+
+    try:
+        # Convert to DataFrame
+        df = pd.DataFrame([r.model_dump() for r in request.instances])
+
+        # Create day_of_week from date where not provided
+        df = create_temporal_features(df)
+
+        # Preprocess raw data
+        features_df = preprocess_raw_crime_data(df)
+
+        if features_df.empty or len(features_df.columns) == 0:
+            raise ValueError("Preprocessing resulted in empty features")
+
+        # Reorder columns to match model expectations
+        if hasattr(model, "_model_impl") and hasattr(
+            model._model_impl, "feature_names_in_"
+        ):
+            expected_features = list(model._model_impl.feature_names_in_)
+            features_df = features_df[expected_features]
+
+        # Make predictions
+        predictions_proba = model.predict(features_df)
+
+        results = []
+        for prob in predictions_proba:
+            prob_val = float(prob)
+            results.append(
+                {"prediction": prob_val >= 0.5, "probability": round(prob_val, 4)}
+            )
+
+        return BatchPredictionResponse(
+            predictions=results,
+            count=len(results),
+            model_version=model_version or "unknown",
+            timestamp=datetime.utcnow().isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"Raw batch prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

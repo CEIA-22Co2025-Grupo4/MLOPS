@@ -23,6 +23,7 @@ from etl_helpers.minio import (
     list_objects,
     set_bucket_lifecycle_policy,
     upload_from_dataframe,
+    upload_json,
     upload_to_minio,
 )
 from etl_helpers.monitoring import (
@@ -50,6 +51,7 @@ PREFIX_ENCODED = config.PREFIX_ENCODED
 PREFIX_SCALED = config.PREFIX_SCALED
 PREFIX_BALANCED = config.PREFIX_BALANCED
 PREFIX_ML_READY = config.PREFIX_ML_READY
+PREFIX_PREPROCESSING = config.PREFIX_PREPROCESSING
 
 # Data processing parameters (from config)
 LIFECYCLE_TTL_DAYS = config.LIFECYCLE_TTL_DAYS
@@ -82,8 +84,13 @@ default_args = {
 def process_etl_taskflow():
     @task.python
     def setup_s3():
-        """Setup MinIO bucket with TTL for all prefixes."""
-        all_prefixes = [
+        """Setup MinIO bucket with TTL for data prefixes.
+
+        Note: PREFIX_PREPROCESSING is excluded from TTL because preprocessing
+        params must persist for inference consistency.
+        """
+        # Data prefixes with TTL (intermediate data can expire)
+        data_prefixes = [
             PREFIX_RAW,
             PREFIX_MERGED,
             PREFIX_ENRICHED,
@@ -93,10 +100,11 @@ def process_etl_taskflow():
             PREFIX_SCALED,
             PREFIX_BALANCED,
             PREFIX_ML_READY,
+            # PREFIX_PREPROCESSING excluded - must persist for inference
         ]
 
         create_bucket_if_not_exists(BUCKET_NAME)
-        set_bucket_lifecycle_policy(BUCKET_NAME, all_prefixes, LIFECYCLE_TTL_DAYS)
+        set_bucket_lifecycle_policy(BUCKET_NAME, data_prefixes, LIFECYCLE_TTL_DAYS)
 
     @task.python
     def download_data(**context):
@@ -344,15 +352,22 @@ def process_etl_taskflow():
         - One-hot encoding: season, day_time
         - Label encoding: domestic
         - Frequency encoding: high cardinality categoricals
+
+        Also saves frequency mappings for inference preprocessing.
         """
         run_date = context["ds"]
         train_key = f"{PREFIX_ENCODED}crimes_train_encoded_{run_date}.csv"
         test_key = f"{PREFIX_ENCODED}crimes_test_encoded_{run_date}.csv"
+        freq_maps_key = f"{PREFIX_PREPROCESSING}frequency_mappings.json"
 
-        # Check if encoded files already exist (idempotent)
-        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
-            BUCKET_NAME, test_key
-        ):
+        # Check if ALL outputs already exist (idempotent)
+        # Must check preprocessing params too, not just data files
+        all_outputs_exist = (
+            check_file_exists(BUCKET_NAME, train_key)
+            and check_file_exists(BUCKET_NAME, test_key)
+            and check_file_exists(BUCKET_NAME, freq_maps_key)
+        )
+        if all_outputs_exist:
             return {
                 "status": "success",
                 "train_file": train_key,
@@ -366,11 +381,19 @@ def process_etl_taskflow():
         # Process data
         train_df = download_to_dataframe(BUCKET_NAME, outliers_result["train_file"])
         test_df = download_to_dataframe(BUCKET_NAME, outliers_result["test_file"])
-        train_encoded, test_encoded = encode_data_fn(train_df, test_df)
+        train_encoded, test_encoded, freq_maps = encode_data_fn(train_df, test_df)
 
         # Upload encoded datasets
         upload_from_dataframe(train_encoded, BUCKET_NAME, train_key)
         upload_from_dataframe(test_encoded, BUCKET_NAME, test_key)
+
+        # Save frequency mappings for inference preprocessing
+        # Convert pd.Series to dict for JSON serialization
+        freq_maps_serializable = {
+            col: freq_series.to_dict() for col, freq_series in freq_maps.items()
+        }
+        upload_json(freq_maps_serializable, BUCKET_NAME, freq_maps_key)
+        logger.info(f"Saved frequency mappings to {freq_maps_key}")
 
         return {
             "status": "success",
@@ -382,16 +405,23 @@ def process_etl_taskflow():
     def scale_data(encode_result, **context):
         """
         Scale numerical features using StandardScaler.
-        Scales: x_coordinate, y_coordinate, latitude, longitude, distance_crime_to_police_station
+        Scales: x_coordinate, y_coordinate, distance_crime_to_police_station
+
+        Also saves scaling parameters (mean/std) for inference preprocessing.
         """
         run_date = context["ds"]
         train_key = f"{PREFIX_SCALED}crimes_train_scaled_{run_date}.csv"
         test_key = f"{PREFIX_SCALED}crimes_test_scaled_{run_date}.csv"
+        scaling_params_key = f"{PREFIX_PREPROCESSING}scaling_params.json"
 
-        # Check if scaled files already exist (idempotent)
-        if check_file_exists(BUCKET_NAME, train_key) and check_file_exists(
-            BUCKET_NAME, test_key
-        ):
+        # Check if ALL outputs already exist (idempotent)
+        # Must check preprocessing params too, not just data files
+        all_outputs_exist = (
+            check_file_exists(BUCKET_NAME, train_key)
+            and check_file_exists(BUCKET_NAME, test_key)
+            and check_file_exists(BUCKET_NAME, scaling_params_key)
+        )
+        if all_outputs_exist:
             return {
                 "status": "success",
                 "train_file": train_key,
@@ -405,11 +435,15 @@ def process_etl_taskflow():
         # Process data
         train_df = download_to_dataframe(BUCKET_NAME, encode_result["train_file"])
         test_df = download_to_dataframe(BUCKET_NAME, encode_result["test_file"])
-        train_scaled, test_scaled = scale_data_fn(train_df, test_df)
+        train_scaled, test_scaled, scaling_params = scale_data_fn(train_df, test_df)
 
         # Upload scaled datasets
         upload_from_dataframe(train_scaled, BUCKET_NAME, train_key)
         upload_from_dataframe(test_scaled, BUCKET_NAME, test_key)
+
+        # Save scaling parameters for inference preprocessing
+        upload_json(scaling_params, BUCKET_NAME, scaling_params_key)
+        logger.info(f"Saved scaling parameters to {scaling_params_key}")
 
         return {
             "status": "success",

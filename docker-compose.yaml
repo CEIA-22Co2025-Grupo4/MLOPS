@@ -20,7 +20,7 @@
 
 # WARNING: This configuration is for local development. Do not use it in a production deployment.
 x-airflow-common: &airflow-common
-  build: './docker/airflow'
+  # Note: Only airflow-init builds the image; other services just use it
   image: ${AIRFLOW_IMAGE_NAME:-extending_airflow:latest}
   profiles:
     - airflow
@@ -348,6 +348,7 @@ services:
 
   airflow-init:
     <<: *airflow-common
+    build: './docker/airflow'
     entrypoint: /bin/bash
     # yamllint disable rule:line-length
     command:

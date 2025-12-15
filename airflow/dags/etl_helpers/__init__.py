@@ -18,6 +18,7 @@ if _parent_dir not in sys.path:
 
 # Re-export config for convenience
 from etl_config import config  # noqa: E402
+from drift_config import drift_config  # noqa: E402
 
 # Re-export MinIO functions for backward compatibility
 from .minio import (  # noqa: E402
@@ -31,6 +32,8 @@ from .minio import (  # noqa: E402
     delete_object,
     download_to_dataframe,
     upload_from_dataframe,
+    upload_json,
+    download_json,
 )
 
 # Re-export monitoring functions for backward compatibility
@@ -51,11 +54,31 @@ from .exceptions import (  # noqa: E402
     FeatureEngineeringError,
 )
 
+# Re-export inference preprocessing functions
+from .inference_preprocessing import (  # noqa: E402
+    preprocess_for_inference,
+    preprocess_raw_crimes,
+    extract_model_features,
+    MODEL_FEATURES,
+)
+
+# Re-export drift monitoring functions
+from .drift_helpers import (  # noqa: E402
+    calculate_psi,
+    ks_test,
+    compute_feature_drift,
+    compute_prediction_drift,
+    compute_concept_drift,
+    call_batch_prediction_api,
+    simulate_predictions,
+)
+
 __version__ = "2.0.0"
 
 __all__ = [
     # Config
     "config",
+    "drift_config",
     # MinIO
     "get_minio_client",
     "set_bucket_lifecycle_policy",
@@ -67,6 +90,8 @@ __all__ = [
     "delete_object",
     "download_to_dataframe",
     "upload_from_dataframe",
+    "upload_json",
+    "download_json",
     # Monitoring
     "log_raw_data_metrics",
     "log_split_metrics",
@@ -79,4 +104,17 @@ __all__ = [
     "DataLoadError",
     "EnrichmentError",
     "FeatureEngineeringError",
+    # Inference
+    "preprocess_for_inference",
+    "preprocess_raw_crimes",
+    "extract_model_features",
+    "MODEL_FEATURES",
+    # Drift monitoring
+    "calculate_psi",
+    "ks_test",
+    "compute_feature_drift",
+    "compute_prediction_drift",
+    "compute_concept_drift",
+    "call_batch_prediction_api",
+    "simulate_predictions",
 ]
