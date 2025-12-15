@@ -206,7 +206,7 @@ services:
       MINIO_ENDPOINT: http://s3:9000
       MINIO_BUCKET: data
       MINIO_PREFIX: ml-ready-data
-    command: ["python", "mlflow_xgboost_poc_docker.py"]
+    command: ["python", "train_xgboost.py"]
     volumes:
       - ./src/training:/trainer
 
