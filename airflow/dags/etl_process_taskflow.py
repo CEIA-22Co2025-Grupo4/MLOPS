@@ -424,6 +424,7 @@ def process_etl_taskflow():
         Strategy: SMOTE (0.5) → RandomUnderSampler (0.8)
         Note: Only balances TRAIN data, test remains unchanged.
         """
+        
         # Si upstream devolvió no_data, salir sin tocar keys que no existen
         if not scale_result or scale_result.get("status") == "no_data":
             return {"status": "no_data"}
@@ -437,10 +438,22 @@ def process_etl_taskflow():
 
         run_date = context["ds"]
         train_key = f"{PREFIX_BALANCED}crimes_train_balanced_{run_date}.csv"
+
         # Idempotencia
         if check_file_exists(BUCKET_NAME, train_key):
             return {"status": "success", "train_file": train_key, "test_file": test_key}
+        
+        # run_date = context["ds"]
+        # train_key = f"{PREFIX_BALANCED}crimes_train_balanced_{run_date}.csv"
+        # test_key = scale_result["test_file"]  # Test unchanged, just pass through
 
+        # # Check if balanced file already exists (idempotent)
+        # if check_file_exists(BUCKET_NAME, train_key):
+        #     return {
+        #         "status": "success",
+        #         "train_file": train_key,
+        #         "test_file": test_key,
+        #     }
 
         # Check if upstream returned no_data
         if scale_result.get("status") == "no_data":
