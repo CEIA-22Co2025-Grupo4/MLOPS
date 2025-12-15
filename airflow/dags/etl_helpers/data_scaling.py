@@ -20,7 +20,7 @@ def scale_data(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
     columns: Optional[List[str]] = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
     """
     Scale numerical features using StandardScaler.
     Fits scaler on train data and transforms both train and test.
@@ -31,7 +31,8 @@ def scale_data(
         columns: Columns to scale (default: spatial columns from config)
 
     Returns:
-        Tuple of (train_scaled, test_scaled)
+        Tuple of (train_scaled, test_scaled, scaling_params)
+        scaling_params contains mean/std for each column (for drift monitoring)
 
     Raises:
         DataValidationError: If data contains NaN values
@@ -43,6 +44,7 @@ def scale_data(
 
     train_scaled = train_df.copy()
     test_scaled = test_df.copy()
+    scaling_params = {}
 
     # Check which columns exist
     existing_columns = [col for col in columns if col in train_df.columns]
@@ -53,7 +55,7 @@ def scale_data(
 
     if not existing_columns:
         logger.warning("No columns to scale found in DataFrame")
-        return train_scaled, test_scaled
+        return train_scaled, test_scaled, scaling_params
 
     # Extract columns to scale
     train_subset = train_df[existing_columns]
@@ -82,6 +84,13 @@ def scale_data(
     train_array = scaler.fit_transform(train_subset)
     test_array = scaler.transform(test_subset)
 
+    # Save scaling parameters for drift monitoring
+    for i, col in enumerate(existing_columns):
+        scaling_params[col] = {
+            "mean": float(scaler.mean_[i]),
+            "std": float(scaler.scale_[i]),
+        }
+
     # Create scaled DataFrames with _standardized suffix
     train_scaled_df = pd.DataFrame(
         train_array,
@@ -105,4 +114,4 @@ def scale_data(
     logger.info(f"  Train shape: {train_scaled.shape}")
     logger.info(f"  Test shape: {test_scaled.shape}")
 
-    return train_scaled, test_scaled
+    return train_scaled, test_scaled, scaling_params

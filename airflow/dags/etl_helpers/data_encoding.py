@@ -299,7 +299,7 @@ def apply_frequency_encoding(
 def encode_data(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, pd.Series]]:
     """
     Apply all encoding transformations to train and test datasets.
 
@@ -316,7 +316,8 @@ def encode_data(
         test_df: Test dataframe
 
     Returns:
-        Tuple of (train_encoded, test_encoded)
+        Tuple of (train_encoded, test_encoded, freq_maps)
+        freq_maps contains the frequency mappings for drift monitoring
     """
     logger.info("Starting data encoding pipeline...")
 
@@ -332,8 +333,8 @@ def encode_data(
     # 4. Label encoding
     train_df, test_df = apply_label_encoding(train_df, test_df)
 
-    # 5. Frequency encoding
-    train_df, test_df, _ = apply_frequency_encoding(train_df, test_df)
+    # 5. Frequency encoding - keep the freq_maps for drift monitoring
+    train_df, test_df, freq_maps = apply_frequency_encoding(train_df, test_df)
 
     # 6. Drop original categorical columns
     columns_to_drop = [
@@ -361,4 +362,4 @@ def encode_data(
 
     logger.info(f"Encoding completed: train={train_df.shape}, test={test_df.shape}")
 
-    return train_df, test_df
+    return train_df, test_df, freq_maps

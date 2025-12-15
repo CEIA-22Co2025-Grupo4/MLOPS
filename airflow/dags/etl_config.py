@@ -22,6 +22,7 @@ class ETLConfig:
     PREFIX_SCALED: str = "6-scaled/"
     PREFIX_BALANCED: str = "7-balanced/"
     PREFIX_ML_READY: str = "ml-ready-data/"
+    PREFIX_PREPROCESSING: str = "preprocessing/"
 
     # Data processing parameters
     LIFECYCLE_TTL_DAYS: int = 60
