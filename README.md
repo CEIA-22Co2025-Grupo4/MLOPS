@@ -230,6 +230,7 @@ make clean        # Eliminar contenedores y volúmenes
 make train        # Entrenar modelo XGBoost
 make champion     # Asignar modelo como champion
 make reload       # Recargar modelo en API
+make drift        # Ver instrucciones de drift monitoring
 
 # Abrir interfaces
 make airflow      # http://localhost:8080
@@ -251,7 +252,8 @@ make api          # http://localhost:8800/docs
 MLOPS-main/
 ├── src/                          # Código fuente
 │   ├── api/                      # FastAPI
-│   │   └── app.py
+│   │   ├── app.py
+│   │   └── preprocessing.py      # Preprocesamiento para inference
 │   └── training/                 # Scripts ML
 │       ├── train_xgboost.py
 │       ├── champion_challenger.py
@@ -259,7 +261,10 @@ MLOPS-main/
 ├── airflow/                      # Apache Airflow
 │   ├── dags/
 │   │   ├── etl_process_taskflow.py
+│   │   ├── drift_process_taskflow.py  # Drift monitoring
 │   │   └── etl_helpers/
+│   │       ├── inference_preprocessing.py
+│   │       └── ...
 │   └── secrets/
 ├── docker/                       # Dockerfiles
 │   ├── airflow/
@@ -285,6 +290,16 @@ MLOPS-main/
      ▼                    ▼                   ▼                   ▼
   MinIO               MLflow              Model              /predict
   s3://data          Tracking            Registry           Endpoint
+                                                                 │
+                          ┌──────────────────────────────────────┘
+                          ▼
+                   ┌─────────────┐
+                   │   Drift     │  ◀── Weekly monitoring
+                   │  Monitoring │
+                   └─────────────┘
+                          │
+                          ▼
+                   Retrain if needed
 ```
 
 </details>
@@ -301,10 +316,30 @@ MLOPS-main/
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
-| POST | `/predict` | Predicción individual |
-| POST | `/predict/batch` | Predicción por lote (max 1000) |
+| POST | `/predict` | Predicción individual (features preprocesadas) |
+| POST | `/predict/batch` | Predicción por lote (features preprocesadas, max 1000) |
+| POST | `/predict/raw` | Predicción individual (datos crudos) |
+| POST | `/predict/raw/batch` | Predicción por lote (datos crudos, max 1000) |
 | GET | `/model/info` | Info del modelo |
 | POST | `/model/reload` | Recargar modelo |
+
+### Predicción con datos crudos
+
+Los endpoints `/predict/raw` y `/predict/raw/batch` aceptan datos sin preprocesar:
+
+```bash
+curl -X POST "http://localhost:8800/predict/raw" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iucr": "0820",
+    "primary_type": "THEFT",
+    "location_description": "STREET",
+    "date": "2024-01-15 14:30:00",
+    "x_coordinate": 1176096.0,
+    "y_coordinate": 1912547.0,
+    "distance_crime_to_police_station": 1250.5
+  }'
+```
 
 ### Input Features (7 total)
 
@@ -358,6 +393,133 @@ s3://data/ml-ready-data/
 ├── train_{date}.csv    # ~173k registros × 7 features
 └── test_{date}.csv     # ~46k registros × 7 features
 ```
+
+</details>
+
+---
+
+## 📊 Drift Monitoring
+
+<details>
+<summary><strong>Click para expandir</strong></summary>
+
+### Prerequisitos
+
+Antes de ejecutar drift monitoring, es necesario:
+
+1. **Ejecutar el ETL** - Para tener datos de entrenamiento
+2. **Entrenar el modelo** - `make train` crea el archivo de referencia automáticamente
+3. **Tener el modelo en la API** - `make champion && make reload`
+
+### Primera Ejecución
+
+Si ejecutas el DAG de drift **sin haber entrenado el modelo**, verás este warning:
+
+```
+NO REFERENCE DATA AVAILABLE
+Drift monitoring requires a reference dataset from training.
+Please run 'make train' to create the reference data.
+```
+
+**Solución**: Ejecuta `make train` primero. El entrenamiento crea automáticamente el archivo `drift/reference/reference_{fecha}.csv`.
+
+### Ejecución Normal
+
+Una vez que existe el archivo de referencia:
+
+1. Ir a Airflow: http://localhost:8080
+2. Buscar DAG: `drift_with_taskflow`
+3. Click en "Trigger DAG" (play button)
+4. Configurar parámetros si es necesario (ver abajo)
+5. Click "Trigger"
+
+### Parámetros del DAG
+
+| Parámetro | Default | Descripción |
+|-----------|---------|-------------|
+| `test_mode` | `false` | Si es `true`, usa delay mínimo de 2 días (para testing) |
+| `data_delay_days` | `null` | Override manual del delay (null = usar config) |
+
+**Para testing** (datos más recientes):
+```
+test_mode: true
+```
+
+**Para override específico**:
+```
+data_delay_days: 3
+```
+
+### Qué hace el DAG
+
+1. **Descarga datos recientes** de Chicago Data Portal (últimos 7 días, con delay configurable)
+2. **Preprocesa** los datos (encoding, scaling) igual que en entrenamiento
+3. **Obtiene predicciones** del modelo via API (`/predict/batch`)
+4. **Calcula métricas de drift**:
+   - **Feature Drift** (PSI, KS-test) - cambios en distribución de features
+   - **Prediction Drift** - cambios en distribución de predicciones
+   - **Concept Drift** - degradación de accuracy (si hay labels)
+5. **Alerta** si se detecta drift significativo
+
+### Tipos de Drift y Umbrales
+
+| Tipo | Métrica | Umbral | Interpretación |
+|------|---------|--------|----------------|
+| Feature Drift | PSI | > 0.2 | Cambio significativo en distribución |
+| Feature Drift | KS | > 0.1 | Test Kolmogorov-Smirnov significativo |
+| Concept Drift | Accuracy Delta | > 0.05 | Degradación de accuracy vs referencia |
+
+**PSI (Population Stability Index)**:
+- < 0.1: Sin cambio significativo
+- 0.1 - 0.2: Cambio moderado
+- \> 0.2: Cambio significativo (requiere atención)
+
+### Archivos generados
+
+```
+s3://data/drift/
+├── reference/
+│   └── reference_{fecha}.csv  # Creado por make train
+├── current/
+│   └── current_{fecha}.csv    # Datos actuales (cada ejecución)
+└── results/
+    └── drift_{fecha}.csv      # Métricas de drift
+```
+
+### Flujo Completo (Nuevo Proyecto)
+
+```bash
+# 1. Instalar y levantar servicios
+make install
+
+# 2. Ejecutar ETL (en Airflow UI)
+make airflow
+# -> Trigger 'etl_with_taskflow', esperar ~15 min
+
+# 3. Entrenar modelo (crea referencia automáticamente)
+make train
+
+# 4. Configurar modelo en API
+make champion
+make reload
+
+# 5. Ejecutar drift monitoring (en Airflow UI)
+# -> Trigger 'drift_with_taskflow' con test_mode: true
+```
+
+### Troubleshooting
+
+**Error: "No crime data available for period..."**
+- Chicago Data Portal tiene delay de publicación (3-7 días)
+- Solución: Aumentar `data_delay_days` o usar datos de fecha anterior
+
+**Error: "No reference dataset found..."**
+- No se ha entrenado el modelo
+- Solución: Ejecutar `make train`
+
+**Error: "API call failed..."**
+- El modelo no está cargado en la API
+- Solución: `make champion && make reload`
 
 </details>
 
